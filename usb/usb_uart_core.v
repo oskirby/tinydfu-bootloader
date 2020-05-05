@@ -77,23 +77,17 @@ with respect to the HOST, and IN endpoints are in with respect to the HOST.
 
 Files:
 
-usb_uart_core.v - top level module creates the end points clusters, (usb_serial_ctrl_ep,
-                  usb_uart_bridge_ep) and the main protocol engine (usb_fs_pe - passing
-                  in the in (3) and out (2) count, along with the actual usb signal
-                  lines).  Also, all the end point signals are connected to the protocol
-                  engine in its invocation.  The serial end point cluster and the control
-                  end point cluster have two endpoints each - one in and one out.
+usb_uart_core.v - top level module creates the end points clusters, (usb_dfu_ctrl_ep)
+                  and the main protocol engine (usb_fs_pe - passing in the in (1) and
+                  out (1) count, along with the actual usb signal lines).  Also, all
+                  the end point signals are connected to the protocol engine in its
+                  invocation.
 
 usb_serial_ctrl_ep - serial control logic.  Two end point interfaces are (one in one
                   out) passed in with their various signal lines.  Contains all the
                   USB setup logic.  Returns the configuration etc.  Vendor 50 1D
                   Product 30 61.  Two interfaces. Descriptors.  Obviously the main
                   configuration file.
-
-usb_uart_bridge.v - where the data action is for us. Is passed in the out endpoint
-                  and the in endpoint, and also the (strange) UART interface signals
-                  (uart_we, uart_re, uart_di, uart_do, uart_wait).  So this translates
-                  between endpoint talk and UART talk.
 
 usb_fs_pe.v     - full speed protocol engine - instanciates all the endpoints, making
                   arrays of in and out end point signals.  Also is passed in are all
@@ -182,7 +176,7 @@ module usb_uart_core(
   reg [31:0] host_presence_timer = 0;
   reg host_presence_timeout = 0;
 
-  usb_serial_ctrl_ep ctrl_ep_inst (
+  usb_dfu_ctrl_ep dfu_ep_inst (
     .clk(clk_48mhz),
     .reset(reset),
     .dev_addr(dev_addr),
