@@ -1,11 +1,23 @@
-set_io pin_led   B3
-set_io pin_usb_p B4
-set_io pin_usb_n A4
-set_io pin_pu    A3
-set_io pin_clk   B2
+###############################################################################
+# Family & Device:    iCE40UP5K
+# Package:            SG48
+###############################################################################
+
+set_io -nowarn pin_16_cs 16
+set_io -nowarn pin_15_sck 15
+set_io -nowarn pin_17_mosi 17
+set_io -nowarn pin_14_miso 14
+set_io -nowarn pin_usb_p 31
+set_io -nowarn pin_usb_n 32
+set_io -nowarn pin_pu 27
+set_io -nowarn pin_clk 35
+
+set_io -nowarn pin_red_led 41
+set_io -nowarn pin_grn_led 40
+set_io -nowarn pin_blu_led 39
 
 # Your debug pins might be different
-set_io --warn-no-port debug[0] H9   # Pin_14
-set_io --warn-no-port debug[1] D9   # Pin_15
-set_io --warn-no-port debug[2] D8   # Pin_16
-set_io --warn-no-port debug[3] C9   # Pin_17
+#set_io --warn-no-port debug[0] H9   # Pin_14
+#set_io --warn-no-port debug[1] D9   # Pin_15
+#set_io --warn-no-port debug[2] D8   # Pin_16
+#set_io --warn-no-port debug[3] C9   # Pin_17

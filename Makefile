@@ -30,15 +30,12 @@ SRC = $(PROJTOP).v $(SOURCES)
 
 PIN_DEF = pins.pcf
 
-DEVICE = lp8k
-PACKAGE = cm81
+DEVICE = up5k
+PACKAGE = sg48
 
-CLK_MHZ = 48
+CLK_MHZ = 24
 
 all: $(PROJTOP).rpt $(PROJTOP).bin
-
-pll.v:
-	icepll -i 16 -o $(CLK_MHZ) -m -f $@
 
 synth: $(PROJTOP).json
 
@@ -61,7 +58,7 @@ prog: $(PROJTOP).bin
 	tinyprog -p $<
 
 clean:
-	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin pll.v
+	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin
 
 .SECONDARY:
 .PHONY: all synth prog clean gui

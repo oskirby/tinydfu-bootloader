@@ -11,9 +11,11 @@ module usbserial_tbx (
         inout  pin_usb_n,
         output pin_pu,
 
-        output pin_led,
+        output pin_red_led,
+        output pin_grn_led,
+        output pin_blu_led,
 
-        output [3:0] debug
+        //output [3:0] debug
     );
 
     wire clk_48mhz;
@@ -23,12 +25,39 @@ module usbserial_tbx (
     // Use an icepll generated pll
     pll pll48( .clock_in(pin_clk), .clock_out(clk_48mhz), .locked( clk_locked ) );
 
+
+    ////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
+    ////////
+    //////// interface with iCE40 RGB LED driver
+    ////////
+    ////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
+    wire [7:0] led_debug;
+
     // LED
     reg [22:0] ledCounter;
     always @(posedge clk_48mhz) begin
         ledCounter <= ledCounter + 1;
     end
-    assign pin_led = ledCounter[ 22 ];
+
+    SB_RGBA_DRV RGBA_DRIVER (
+        .CURREN(1'b1),
+        .RGBLEDEN(1'b1),
+        .RGB0PWM(ledCounter[ 22 ]),
+        .RGB1PWM(led_debug[0]),
+        .RGB2PWM(led_debug[1]),
+        .RGB0(pin_red_led),
+        .RGB1(pin_grn_led),
+        .RGB2(pin_blu_led)
+    );
+
+    defparam RGBA_DRIVER.CURRENT_MODE = "0b1";
+    defparam RGBA_DRIVER.RGB0_CURRENT = "0b000001";  // Blue
+    defparam RGBA_DRIVER.RGB1_CURRENT = "0b000001";  // Red
+    defparam RGBA_DRIVER.RGB2_CURRENT = "0b000001";  // Green
+  
+
 
     // Generate reset signal
     reg [5:0] reset_cnt = 0;
