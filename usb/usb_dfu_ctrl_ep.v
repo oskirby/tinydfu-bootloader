@@ -132,15 +132,11 @@ module usb_dfu_ctrl_ep #(
   wire in_data_stage;
   assign in_data_stage = has_data_stage && bmRequestType[7];
 
-  reg [7:0] bytes_sent = 0;
-  reg [6:0] rom_length = 0;
+  reg [7:0] rom_length = 0;
+  reg [7:0] max_length = 0;
 
-  wire all_data_sent =
-    (bytes_sent >= rom_length) ||
-    (bytes_sent >= wLength[7:0]); // save it from the full 16b
-
-  wire more_data_to_send =
-    !all_data_sent;
+  wire all_data_sent = (rom_length == 0) || (max_length == 0);
+  wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
 
@@ -282,6 +278,8 @@ module usb_dfu_ctrl_ep #(
     end
 
     if (setup_stage_end) begin
+      max_length <= wLength[7:0];
+
       // Standard Requests
       case ({bmRequestType[6:5], bRequest})
         'h006 : begin
@@ -407,14 +405,15 @@ module usb_dfu_ctrl_ep #(
 
     if (ctrl_xfr_state == DATA_IN && more_data_to_send && in_ep_grant && in_ep_data_free) begin
       rom_addr <= rom_addr + 1;
-      bytes_sent <= bytes_sent + 1;
+      rom_length <= rom_length - 1;
+      max_length <= max_length - 1;
     end
 
     if (status_stage_end) begin
       setup_data_addr <= 0;
-      bytes_sent <= 0;
       rom_addr <= 0;
       rom_length <= 0;
+      max_length <= 0;
 
       if (save_dev_addr) begin
         save_dev_addr <= 0;
