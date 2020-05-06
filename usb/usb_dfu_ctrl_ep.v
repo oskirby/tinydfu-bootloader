@@ -35,11 +35,12 @@ module usb_dfu_ctrl_ep #(
 
 
   localparam IDLE = 0;
-  localparam SETUP = 1;
-  localparam DATA_IN = 2;
-  localparam DATA_OUT = 3;
-  localparam STATUS_IN = 4;
-  localparam STATUS_OUT = 5;
+  localparam SETUP_IN = 1;
+  localparam SETUP_DONE = 2;
+  localparam DATA_IN = 3;
+  localparam DATA_OUT = 4;
+  localparam STATUS_IN = 5;
+  localparam STATUS_OUT = 6;
 
   // DFU constants and states.
   localparam DFU_STATUS_OK = 'h00;
@@ -132,10 +133,10 @@ module usb_dfu_ctrl_ep #(
   wire in_data_stage;
   assign in_data_stage = has_data_stage && bmRequestType[7];
 
-  reg [7:0] rom_length = 0;
-  reg [7:0] max_length = 0;
+  reg [15:0] rom_length = 0;
+  reg [15:0] max_length = 0;
 
-  wire all_data_sent = (rom_length == 0) || (max_length == 0);
+  wire all_data_sent = (rom_length == 16'b0) || (max_length == 16'b0);
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
@@ -183,29 +184,31 @@ module usb_dfu_ctrl_ep #(
     case (ctrl_xfr_state)
       IDLE : begin
         if (setup_pkt_start) begin
-          ctrl_xfr_state_next <= SETUP;
+          ctrl_xfr_state_next <= SETUP_IN;
         end else begin
           ctrl_xfr_state_next <= IDLE;
         end
       end
 
-      SETUP : begin
+      SETUP_IN : begin
         if (pkt_end) begin
-          setup_stage_end <= 1;
+          ctrl_xfr_state_next <= SETUP_DONE;
+        end else begin
+          ctrl_xfr_state_next <= SETUP_IN;
+        end
+      end
 
-          if (in_data_stage) begin
-            ctrl_xfr_state_next <= DATA_IN;
+      SETUP_DONE : begin
+        setup_stage_end <= 1;
+        if (in_data_stage) begin
+          ctrl_xfr_state_next <= DATA_IN;
 
-          end else if (out_data_stage) begin
-            ctrl_xfr_state_next <= DATA_OUT;
-
-          end else begin
-            ctrl_xfr_state_next <= STATUS_IN;
-            send_zero_length_data_pkt <= 1;
-          end
+        end else if (out_data_stage) begin
+          ctrl_xfr_state_next <= DATA_OUT;
 
         end else begin
-          ctrl_xfr_state_next <= SETUP;
+          ctrl_xfr_state_next <= STATUS_IN;
+          send_zero_length_data_pkt <= 1;
         end
       end
 
@@ -278,8 +281,8 @@ module usb_dfu_ctrl_ep #(
     end
 
     if (setup_stage_end) begin
-      max_length <= wLength[7:0];
-
+      max_length <= wLength;
+      
       // Standard Requests
       case ({bmRequestType[6:5], bRequest})
         'h006 : begin
@@ -358,12 +361,12 @@ module usb_dfu_ctrl_ep #(
           // DFU_UPLOAD
           if (dfu_state == DFU_STATE_dfuUPLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= (wValue - dfu_block_start) * MAX_IN_PACKET_SIZE;
-            rom_length <= MAX_IN_PACKET_SIZE;
+            rom_addr   <= 0;
+            rom_length <= SPI_PAGE_SIZE;
           end else begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= MAX_IN_PACKET_SIZE;
+            rom_length <= SPI_PAGE_SIZE;
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_start <= wValue;
@@ -494,8 +497,8 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h026] <= 'h0b;				// bmAttributes
       ep_rom['h027] <= 255;         // wDetachTimeout[0]
       ep_rom['h028] <= 0;           // wDetachTimeout[1]
-      ep_rom['h029] <= MAX_OUT_PACKET_SIZE; // wTransferSize[0]
-      ep_rom['h02A] <= 0;           // wTransferSize[1]
+      ep_rom['h029] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
+      ep_rom['h02A] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
       ep_rom['h02B] <= 'h1a;        // bcdDFUVersion[0]
       ep_rom['h02C] <= 'h01;        // bcdDFUVersion[1]
 
