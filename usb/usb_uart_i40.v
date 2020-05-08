@@ -36,6 +36,12 @@ module usb_uart (
   inout  pin_usb_p,
   inout  pin_usb_n,
 
+  // SPI pins
+  output spi_csel,
+  output spi_clk,
+  output spi_mosi,
+  input spi_miso,
+
   // uart pipeline in (out of the device, into the host)
   input [7:0] uart_in_data,
   input       uart_in_valid,
@@ -67,6 +73,12 @@ module usb_uart (
         .usb_p_rx(usb_p_rx),
         .usb_n_rx(usb_n_rx),
         .usb_tx_en(usb_tx_en),
+
+        // SPI pins
+        .spi_csel(spi_csel),
+        .spi_clk(spi_clk),
+        .spi_mosi(spi_mosi),
+        .spi_miso(spi_miso),
 
         // uart pipeline in
         .uart_in_data( uart_in_data ),

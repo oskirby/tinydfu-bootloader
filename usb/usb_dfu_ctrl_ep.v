@@ -30,7 +30,17 @@ module usb_dfu_ctrl_ep #(
   output reg [7:0] in_ep_data = 0,
   output in_ep_data_done,
   output reg in_ep_stall,
-  input in_ep_acked
+  input in_ep_acked,
+
+  ////////////////////
+  // in endpoint interface
+  ////////////////////
+  output spi_csel,
+  output spi_clk,
+  output spi_mosi,
+  input spi_miso,
+
+  output [7:0] debug,
 );
 
 
@@ -150,8 +160,7 @@ module usb_dfu_ctrl_ep #(
   assign in_ep_data_done = (in_data_transfer_done && ctrl_xfr_state == DATA_IN) || send_zero_length_data_pkt;
 
   assign in_ep_req = ctrl_xfr_state == DATA_IN && more_data_to_send;
-  assign in_ep_data_put = ctrl_xfr_state == DATA_IN && more_data_to_send && in_ep_data_free;
-
+  assign in_ep_data_put = (rom_mux != ROM_FIRMWARE) ? rom_data_put : dfu_spi_rd_data_put;
 
   localparam ROM_ENDPOINT = 0;
   localparam ROM_STRING = 1;
@@ -160,12 +169,39 @@ module usb_dfu_ctrl_ep #(
 
   reg [11:0] rom_addr = 0;
   reg [7:0] rom_mux = ROM_ENDPOINT;
+  wire rom_data_put;
+  assign rom_data_put = (ctrl_xfr_state == DATA_IN && more_data_to_send) && in_ep_data_free;
 
   wire [7:0] dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
   reg [15:0] dfu_block_start = 0;
   reg [15:0] dfu_page_addr = 0;
   reg [15:0] dfu_byte_addr = 0;
+
+  wire [7:0] dfu_spi_rd_data;
+  wire dfu_spi_rd_data_put;
+  wire [7:0] dfu_spi_wr_data;
+
+  usb_spiflash_bridge #(
+    .SPI_PAGE_SIZE(SPI_PAGE_SIZE)
+  ) dfu_spiflash_bridge (
+    .clk(clk),
+    .reset(reset),
+
+    .spi_csel(spi_csel),
+    .spi_clk(spi_clk),
+    .spi_mosi(spi_mosi),
+    .spi_miso(spi_miso),
+
+    .address(16'b0),
+
+    .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
+    .rd_data_free(more_data_to_send && in_ep_data_free),
+    .rd_data_put(dfu_spi_rd_data_put),
+    .rd_data(dfu_spi_rd_data),
+
+    .debug(debug)
+  );
 
   reg save_dev_addr = 0;
   reg [6:0] new_dev_addr = 0;
@@ -406,7 +442,7 @@ module usb_dfu_ctrl_ep #(
       endcase
     end
 
-    if (ctrl_xfr_state == DATA_IN && more_data_to_send && in_ep_grant && in_ep_data_free) begin
+    if (in_ep_grant && in_ep_data_put) begin
       rom_addr <= rom_addr + 1;
       rom_length <= rom_length - 1;
       max_length <= max_length - 1;
@@ -434,15 +470,15 @@ module usb_dfu_ctrl_ep #(
   reg [7:0] ep_rom[255:0];
   reg [7:0] str_rom[255:0];
   reg [7:0] dfu_mem[15:0];
-  reg [7:0] dfu_firmware[SPI_PAGE_SIZE-1:0];
 
+  // Mux the data being read
   always @* begin
-     case (rom_mux)
-       ROM_ENDPOINT : in_ep_data <= ep_rom[rom_addr];
-       ROM_STRING   : in_ep_data <= str_rom[rom_addr];
-       ROM_DFUSTATE : in_ep_data <= dfu_mem[rom_addr];
-       ROM_FIRMWARE : in_ep_data <= dfu_firmware[rom_addr];
-       default      : in_ep_data <= 8'b0;
+    case (rom_mux)
+      ROM_ENDPOINT : in_ep_data <= ep_rom[rom_addr];
+      ROM_STRING   : in_ep_data <= str_rom[rom_addr];
+      ROM_DFUSTATE : in_ep_data <= dfu_mem[rom_addr];
+      ROM_FIRMWARE : in_ep_data <= dfu_spi_rd_data;
+      default      : in_ep_data <= 8'b0;
     endcase
   end
 
@@ -556,13 +592,5 @@ module usb_dfu_ctrl_ep #(
       dfu_mem['h005] <= 0;                  // iString
 
   end
-
-  /// for debugging
-  genvar i;
-  generate
-    for (i = 0; i < SPI_PAGE_SIZE; i = i + 1) begin
-      initial dfu_firmware[i] <= i[7:0];
-    end
-  endgenerate
 
 endmodule

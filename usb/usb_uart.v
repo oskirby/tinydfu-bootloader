@@ -135,6 +135,12 @@ module usb_uart (
   input  usb_n_rx,
   output usb_tx_en,
 
+  // SPI lines.
+  output spi_csel,
+  output spi_clk,
+  output spi_mosi,
+  input spi_miso,
+
   // uart pipeline in (into the module, out of the device, into the host)
   input [7:0] uart_in_data,
   input       uart_in_valid,

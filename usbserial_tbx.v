@@ -15,7 +15,12 @@ module usbserial_tbx (
         output pin_grn_led,
         output pin_blu_led,
 
-        //output [3:0] debug
+        output pin_16_cs,
+        output pin_15_sck,
+        output pin_14_mosi,
+        input pin_17_miso,
+
+        output [3:0] debug
     );
 
     wire clk_48mhz;
@@ -88,6 +93,12 @@ module usbserial_tbx (
         .pin_usb_p( pin_usb_p ),
         .pin_usb_n( pin_usb_n ),
 
+        // SPI
+        .spi_csel( pin_16_cs ),
+        .spi_clk( pin_15_sck ),
+        .spi_mosi( pin_14_mosi ),
+        .spi_miso( pin_17_miso ),  
+
         // uart pipeline in
         .uart_in_data( uart_in_data ),
         .uart_in_valid( uart_in_valid ),
@@ -95,9 +106,9 @@ module usbserial_tbx (
 
         .uart_out_data( uart_in_data ),
         .uart_out_valid( uart_in_valid ),
-        .uart_out_ready( uart_in_ready  )
+        .uart_out_ready( uart_in_ready  ),
 
-        //.debug( debug )
+        .debug( debug )
     );
 
     // USB Host Detect Pull Up

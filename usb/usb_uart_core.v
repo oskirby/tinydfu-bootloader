@@ -129,6 +129,12 @@ module usb_uart_core(
   input  usb_n_rx,
   output usb_tx_en,
 
+  // SPI lines.
+  output spi_csel,
+  output spi_clk,
+  output spi_mosi,
+  input spi_miso,
+
   // uart pipeline in (into the module, out of the device, into the host)
   input [7:0] uart_in_data,
   input       uart_in_valid,
@@ -200,7 +206,15 @@ module usb_uart_core(
     .in_ep_data(ctrl_in_ep_data),
     .in_ep_data_done(ctrl_in_ep_data_done),
     .in_ep_stall(ctrl_in_ep_stall),
-    .in_ep_acked(ctrl_in_ep_acked)
+    .in_ep_acked(ctrl_in_ep_acked),
+
+    // SPI flash interface
+    .spi_csel(spi_csel),
+    .spi_clk(spi_clk),
+    .spi_mosi(spi_mosi),
+    .spi_miso(spi_miso),
+    
+    .debug(debug[3:0]),
   );
 
   wire nak_in_ep_grant;
