@@ -1,5 +1,5 @@
 module usb_spiflash_bridge #(
-  parameter SPI_PAGE_SIZE = 4096
+  parameter SECTOR_SIZE = 4096
 ) (
   input clk,
   input reset,
@@ -86,7 +86,7 @@ module usb_spiflash_bridge #(
   reg [3:0] flash_state = FLASH_STATE_IDLE;
   reg [3:0] flash_state_next = FLASH_STATE_IDLE;
 
-  wire [23:0] byte_address = (address * SPI_PAGE_SIZE);
+  wire [23:0] byte_address = (address * SECTOR_SIZE);
 
   assign debug[0] = transfer_done;
   assign debug[1] = rd_data_free;

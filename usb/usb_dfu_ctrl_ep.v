@@ -1,7 +1,8 @@
 module usb_dfu_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
   parameter MAX_OUT_PACKET_SIZE = 32,
-  parameter SPI_PAGE_SIZE = 4096,
+  parameter SPI_SECTOR_SIZE = 4096,
+  parameter SPI_FLASH_SIZE = 4, // In sectors
 ) (
   input clk,
   input reset,
@@ -146,7 +147,7 @@ module usb_dfu_ctrl_ep #(
   reg [15:0] rom_length = 0;
   reg [15:0] max_length = 0;
 
-  wire all_data_sent = (rom_length == 16'b0) || (max_length == 16'b0);
+  wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (max_length == 16'b0));
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
@@ -175,15 +176,15 @@ module usb_dfu_ctrl_ep #(
   wire [7:0] dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
   reg [15:0] dfu_block_start = 0;
-  reg [15:0] dfu_page_addr = 0;
-  reg [15:0] dfu_byte_addr = 0;
+  wire [15:0] dfu_block_num = (wValue - dfu_block_start);
+  wire dfu_block_done = (dfu_block_num >= SPI_FLASH_SIZE);
 
   wire [7:0] dfu_spi_rd_data;
   wire dfu_spi_rd_data_put;
   wire [7:0] dfu_spi_wr_data;
 
   usb_spiflash_bridge #(
-    .SPI_PAGE_SIZE(SPI_PAGE_SIZE)
+    .SECTOR_SIZE(SPI_SECTOR_SIZE)
   ) dfu_spiflash_bridge (
     .clk(clk),
     .reset(reset),
@@ -193,7 +194,7 @@ module usb_dfu_ctrl_ep #(
     .spi_mosi(spi_mosi),
     .spi_miso(spi_miso),
 
-    .address(wValue - dfu_block_start),
+    .address(dfu_block_num),
 
     .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
     .rd_data_free(more_data_to_send && in_ep_data_free),
@@ -395,18 +396,22 @@ module usb_dfu_ctrl_ep #(
 
         'h102 : begin
           // DFU_UPLOAD
-          if (dfu_mem['h004] == DFU_STATE_dfuUPLOAD_IDLE) begin
+          if (dfu_mem['h004] != DFU_STATE_dfuUPLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
-          end else begin
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            rom_length <= SPI_SECTOR_SIZE;
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_start <= wValue;
             dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
+          end else if (dfu_block_done) begin
+            rom_mux    <= ROM_ENDPOINT;
+            rom_addr   <= 'h00;
+            rom_length <= 0;
+          end else begin
+            rom_mux    <= ROM_FIRMWARE;
+            rom_addr   <= 0;
+            rom_length <= SPI_SECTOR_SIZE;
           end
         end
 
@@ -533,9 +538,9 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h026] <= 'h0b;				// bmAttributes
       ep_rom['h027] <= 255;         // wDetachTimeout[0]
       ep_rom['h028] <= 0;           // wDetachTimeout[1]
-      ep_rom['h029] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
-      ep_rom['h02A] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
-      ep_rom['h02B] <= 'h1a;        // bcdDFUVersion[0]
+      ep_rom['h029] <= SPI_SECTOR_SIZE >> 0; // wTransferSize[0]
+      ep_rom['h02A] <= SPI_SECTOR_SIZE >> 8; // wTransferSize[1]
+      ep_rom['h02B] <= 'h10;        // bcdDFUVersion[0]
       ep_rom['h02C] <= 'h01;        // bcdDFUVersion[1]
 
       // Language string descriptor is at string index zero.
