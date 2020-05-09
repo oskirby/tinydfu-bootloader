@@ -182,6 +182,7 @@ module usb_dfu_ctrl_ep #(
   wire [7:0] dfu_spi_rd_data;
   wire dfu_spi_rd_data_put;
   wire [7:0] dfu_spi_wr_data;
+  wire dfu_spi_wr_data_get;
 
   usb_spiflash_bridge #(
     .SECTOR_SIZE(SPI_SECTOR_SIZE)
@@ -200,6 +201,11 @@ module usb_dfu_ctrl_ep #(
     .rd_data_free(more_data_to_send && in_ep_data_free),
     .rd_data_put(dfu_spi_rd_data_put),
     .rd_data(dfu_spi_rd_data),
+
+    .wr_request(ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE),
+    .wr_data_avail(out_ep_data_avail),
+    .wr_data_get(dfu_spi_wr_data_get),
+    .wr_data(out_ep_data),
 
     .debug(debug)
   );
@@ -394,6 +400,27 @@ module usb_dfu_ctrl_ep #(
           dfu_altsetting <= wValue;
         end
 
+        'h101 : begin
+          // DFU_DNLOAD
+          if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
+            rom_mux    <= ROM_FIRMWARE;
+            rom_addr   <= 0;
+            rom_length <= SPI_SECTOR_SIZE;
+
+            // Switch to the dfuDNLOAD-IDLE state.
+            dfu_block_start <= wValue;
+            dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_IDLE;
+          end else if (dfu_block_done) begin
+            rom_mux    <= ROM_ENDPOINT;
+            rom_addr   <= 0;
+            rom_length <= 0;
+          end else begin
+            rom_mux    <= ROM_FIRMWARE;
+            rom_addr   <= 0;
+            rom_length <= SPI_SECTOR_SIZE;
+          end
+        end
+
         'h102 : begin
           // DFU_UPLOAD
           if (dfu_mem['h004] != DFU_STATE_dfuUPLOAD_IDLE) begin
@@ -406,7 +433,7 @@ module usb_dfu_ctrl_ep #(
             dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
           end else if (dfu_block_done) begin
             rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 'h00;
+            rom_addr   <= 0;
             rom_length <= 0;
           end else begin
             rom_mux    <= ROM_FIRMWARE;
@@ -549,7 +576,7 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h02F] <= 'h09;  // wLANGID[0] == US English
       ep_rom['h030] <= 'h04;  // wLANGID[1]
 
-      // String descriptors are located at 'h80 + ('h20 * wIndex - 1)
+      // String descriptors are allocated 32B for each descriptor.
       str_rom['h000] <= 16;  // bLength
       str_rom['h001] <= 3;   // bDescriptorType == STRING
       str_rom['h002] <= "L";  str_rom['h003] <= 0;

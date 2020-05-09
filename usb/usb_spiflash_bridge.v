@@ -78,10 +78,11 @@ module usb_spiflash_bridge #(
   localparam FLASH_STATE_START = 1;
   localparam FLASH_STATE_READ_COMMAND = 2;
   localparam FLASH_STATE_READ_DATA = 3;
-  localparam FLASH_STATE_ERASE = 4;
-  localparam FLASH_STATE_BUSY = 5;
-  localparam FLASH_STATE_WRITE_COMMAND = 6;
-  localparam FLASH_STATE_WRITE_DATA = 7;
+  localparam FLASH_STATE_ERASE_ENABLE = 4;
+  localparam FLASH_STATE_ERASE_COMMAND = 5;
+  localparam FLASH_STATE_ERASE_BUSY = 6;
+  localparam FLASH_STATE_WRITE_COMMAND = 7;
+  localparam FLASH_STATE_WRITE_DATA = 8;
   
   reg [3:0] flash_state = FLASH_STATE_IDLE;
   reg [3:0] flash_state_next = FLASH_STATE_IDLE;
@@ -92,33 +93,32 @@ module usb_spiflash_bridge #(
   assign debug[1] = rd_data_free;
   assign debug[2] = rd_data_put;
 
-  reg [7:0] command_bits = 0;
-  reg [63:0] command_buf;
-  reg command_start = 0;
-  wire command_hold_csel;
-  assign command_hold_csel = ((flash_state == FLASH_STATE_READ_COMMAND) ||
-                            (flash_state == FLASH_STATE_READ_DATA) ||
-                            (flash_state == FLASH_STATE_WRITE_COMMAND) ||
-                            (flash_state == FLASH_STATE_WRITE_DATA));
+  reg [7:0] command_bits = 0;   // Number of bits to transfer in the command stage.
+  reg [3:0] command_csel = 1;   // Number of clocks to hold CSEL high after the command (or zero to leave CSEL active).
+  reg [63:0] command_buf;       // Command data to be shifted out of MOSI.
+  reg command_start = 0;        // Pulsed high to start a new command.
 
   reg [63:0] read_buf = 0;
   reg [63:0] write_buf = 0;
-  reg [7:0] bitcount;
+  reg [7:0] bitcount = 0;
+  reg [3:0] cseldelay = 0;
+  wire transfer_busy = (bitcount || cseldelay);
   wire transfer_done;
   
   assign rd_data_put = (flash_state == FLASH_STATE_READ_DATA) && transfer_done;
   assign wr_data_get = (flash_state == FLASH_STATE_WRITE_DATA) && transfer_done;
   always @* rd_data <= read_buf[7:0];
 
-  rising_edge_detector detect_transfer_done (
+  falling_edge_detector detect_transfer_done (
     .clk(clk),
-    .in(bitcount == 0),
+    .in(transfer_busy),
     .out(transfer_done)
   );
 
   always @* begin
     command_start <= 0;
     command_bits <= 0;
+    command_csel <= 2;
     command_buf <= 0;
 
     case (flash_state)
@@ -127,27 +127,25 @@ module usb_spiflash_bridge #(
           flash_state_next <= FLASH_STATE_READ_COMMAND;
           command_start <= 1;
           command_bits <= 40;
+          command_csel <= 0;
           command_buf  <= {24'b0, FLASH_CMD_FAST_READ, byte_address, 8'b0};
-          //command_buf <= {24'b0, FLASH_CMD_RELEASE_POWER_DOWN, 32'b0};
         
+        end else if (wr_request) begin
+          flash_state_next <= FLASH_STATE_ERASE_ENABLE;
+          command_start <= 1;
+          command_bits  <= 8;
+          command_buf   <= {56'b0, FLASH_CMD_WRITE_ENABLE};
+
         end else begin
           flash_state_next <= FLASH_STATE_IDLE;
         end
       end
 
       FLASH_STATE_READ_COMMAND : begin
-        if (bitcount == 0) begin
+        if (!transfer_busy) begin
           flash_state_next <= FLASH_STATE_READ_DATA;
         end else begin
           flash_state_next <= FLASH_STATE_READ_COMMAND;
-        end
-      end
-
-      FLASH_STATE_ERASE : begin
-        if (bitcount == 0) begin
-          flash_state_next <= FLASH_STATE_BUSY;
-        end else begin
-          flash_state_next <= FLASH_STATE_WRITE_COMMAND;
         end
       end
 
@@ -156,6 +154,42 @@ module usb_spiflash_bridge #(
           flash_state_next <= FLASH_STATE_IDLE;
         end else begin
           flash_state_next <= FLASH_STATE_READ_DATA;
+        end
+      end
+
+      FLASH_STATE_ERASE_ENABLE : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_ERASE_COMMAND;
+          command_start <= 1;
+          command_bits  <= 32;
+          command_csel  <= 4;
+          command_buf   <= {32'b0, FLASH_CMD_SECTOR_ERASE, byte_address};
+        end else begin
+          flash_state_next <= FLASH_STATE_ERASE_ENABLE;
+        end
+      end
+
+      FLASH_STATE_ERASE_COMMAND : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_ERASE_BUSY;
+          command_start <= 1;
+          command_bits  <= 16;
+          command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
+        end else begin
+          flash_state_next <= FLASH_STATE_ERASE_COMMAND;
+        end
+      end
+
+      FLASH_STATE_ERASE_BUSY : begin
+        if (transfer_busy) begin
+          flash_state_next <= FLASH_STATE_ERASE_BUSY;
+        end else if (read_buf[0]) begin
+          flash_state_next <= FLASH_STATE_ERASE_BUSY;
+          command_start <= 1;
+          command_bits  <= 16;
+          command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
+        end else begin
+          flash_state_next <= FLASH_STATE_IDLE;
         end
       end
 
@@ -177,10 +211,15 @@ module usb_spiflash_bridge #(
     // Start a new command by asserting CSEL and setting up counters.
     if (command_start) begin
       bitcount <= command_bits;
+      cseldelay <= command_csel;
       write_buf <= command_buf;
       spi_csel <= 1'b0;
       spi_clk <= 1'b0;
       spi_mosi <= command_buf[command_bits-1];
+    end else if (flash_state == FLASH_STATE_IDLE) begin
+      spi_csel <= 1'b1;
+      spi_clk <= 1'b0;
+      spi_mosi <= 1'b0;
     end
 
     // Transfer bits to and from the flash.
@@ -193,9 +232,10 @@ module usb_spiflash_bridge #(
         read_buf <= {read_buf[62:0], spi_miso};
         bitcount <= bitcount - 1;
       end
-    end else if (!command_hold_csel) begin
-        spi_csel <= 1'b1;
-        spi_clk <= 1'b0;
+    end else if (cseldelay) begin
+      spi_csel <= 1'b1;
+      spi_clk <= 1'b0;
+      cseldelay <= cseldelay - 1;
     end
 
     // Transfer another byte if we have made it to the data stage.
