@@ -193,7 +193,7 @@ module usb_dfu_ctrl_ep #(
     .spi_mosi(spi_mosi),
     .spi_miso(spi_miso),
 
-    .address(16'b0),
+    .address(wValue - dfu_block_start),
 
     .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
     .rd_data_free(more_data_to_send && in_ep_data_free),

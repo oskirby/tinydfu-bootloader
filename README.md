@@ -15,7 +15,7 @@ This project uses this improved USB module as a starting point, and creates a US
 the host tools like `dfu-util` on Linux or DfuSe on Windows.
 
 This is currently being developed on a Lattice ice40up5k-b-evn, which is doing a poor job of meeting timing due to the slower design of the
-ice40 UltraPlus family. Eventually we hope to test this on a TinyFPGA BX, and ultimately the [Logicbone](http://github.com/oskirby/logicbone].
+ice40 UltraPlus family. Eventually we hope to test this on a TinyFPGA BX, and ultimately the [Logicbone](http://github.com/oskirby/logicbone).
 
 **Interface**
 
@@ -37,8 +37,6 @@ usb_dfu u_u (
   .spi_miso( spi_miso )
 );
 ```
-
-Note that there are no baud rates, start, stop or parity specifications as this is only a pretend UART.
 
 **Clock**
 
