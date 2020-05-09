@@ -1,36 +1,29 @@
 /*
-   usb_uart
+   usb_dfu
 
-  Luke Valenti's USB module, as adapted by Lawrie Griffiths.
+  Luke Valenti's USB module, as adapted by Lawrie Griffiths and Owen Kirby.
 
   This module was originally tinyfpga_bootloader.v in Luke's code.
-
-  It creates the endpoint modules and the protocol engine to run things.  Whereas
-  the original creates a usb_spi_bridge, this one creates a usb_uart_bridge.
 
   Instanciation template
 
   ----------------------------------------------------
-  usb_uart uart (
+  usb_dfu dfu (
     .clk_48mhz  (clk_48mhz),
     .reset      (reset),
 
-    // pins - these must be connected properly to the outside world.  See below.
+    // USB pins - these must be connected properly to the outside world.  See below.
     .usb_p_tx(usb_p_tx),
     .usb_n_tx(usb_n_tx),
     .usb_p_rx(usb_p_rx),
     .usb_n_rx(usb_n_rx),
     .usb_tx_en(usb_tx_en),
 
-    // uart pipeline in
-    .uart_in_data( uart_in_data ),
-    .uart_in_valid( uart_in_valid ),
-    .uart_in_ready( uart_in_ready ),
-
-    // uart pipeline out
-    .uart_out_data( uart_out_data ),
-    .uart_out_valid( uart_out_valid ),
-    .uart_out_ready( uart_out_ready ),
+    // SPI pins
+    .spi_csel(spi_csel),
+    .spi_clk(spi_clk),
+    .spi_mosi(spi_mosi),
+    .spi_miso(spi_miso),
 
     .debug( debug )
   );
@@ -70,30 +63,28 @@
   ----------------------------------------------------
 
 It should be noted that there are no other invocations of usb stuff other than
-usb_uart.v.   Since it's the top, I'm going to put some doc in here.
+usb_dfu.v.   Since it's the top, I'm going to put some doc in here.
 
 General note: USB communications happen over endpoints.  The OUT endpoints are out
 with respect to the HOST, and IN endpoints are in with respect to the HOST.
 
 Files:
 
-usb_uart.v      - top level module creates the end points clusters, (usb_serial_ctrl_ep,
-                  usb_uart_bridge_ep) and the main protocol engine (usb_fs_pe - passing
-                  in the in (3) and out (2) count, along with the actual usb signal
-                  lines).  Also, all the end point signals are connected to the protocol
-                  engine in its invocation.  The serial end point cluster and the control
-                  end point cluster have two endpoints each - one in and one out.
+usb_dfu.v       - top level module creates the control end point, (usb_dfu_ctrl_ep) and
+                  the main protocol engine (usb_fs_pe - passing in the endpoint count,
+                  along with the actual usb signal lines).  Also, the endpoint signals
+                  are connected to the protocol engine in its invocation.  The DFU
+                  control end point cluster has two endpoints each - one in and one out.
 
-usb_serial_ctrl_ep - serial control logic.  Two end point interfaces are (one in one
+usb_serial_ctrl_ep - DFU control logic.  Two end point interfaces are (one in one
                   out) passed in with their various signal lines.  Contains all the
                   USB setup logic.  Returns the configuration etc.  Vendor 50 1D
                   Product 30 61.  Two interfaces. Descriptors.  Obviously the main
                   configuration file.
 
-usb_uart_bridge.v - where the data action is for us. Is passed in the out endpoint
-                  and the in endpoint, and also the (strange) UART interface signals
-                  (uart_we, uart_re, uart_di, uart_do, uart_wait).  So this translates
-                  between endpoint talk and UART talk.
+usb_spiflash_bridge.v - where the data action is for us. Is passed the SPI signals to the
+                  flash device. This translates the read, erase and write state machines
+                  into the USB endpoint interface.
 
 usb_fs_pe.v     - full speed protocol engine - instanciates all the endpoints, making
                   arrays of in and out end point signals.  Also is passed in are all
@@ -123,7 +114,7 @@ serial.v        - width adapter (x widths to y widths)
 
 */
 
-module usb_uart (
+module usb_dfu (
   input  clk_48mhz,
   input reset,
 
@@ -140,16 +131,6 @@ module usb_uart (
   output spi_clk,
   output spi_mosi,
   input spi_miso,
-
-  // uart pipeline in (into the module, out of the device, into the host)
-  input [7:0] uart_in_data,
-  input       uart_in_valid,
-  output      uart_in_ready,
-
-  // uart pipeline out (out of the host, into the device, out of the module)
-  output [7:0] uart_out_data,
-  output       uart_out_valid,
-  input        uart_out_ready,
 
   output [11:0] debug
 );

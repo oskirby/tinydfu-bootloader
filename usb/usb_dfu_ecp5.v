@@ -1,14 +1,14 @@
 /*
-  usb_uart_ecp5
+  usb_dfu_ecp5
 
-  Simple wrapper around the usb_uart which incorporates the Pin driver logic
+  Simple wrapper around the usb_dfu which incorporates the Pin driver logic
   so this doesn't clutter the top level circuit
 
-  Make the signature generic (usb_uart) and rely on the file inclusion process (makefile)
+  Make the signature generic (usb_dfu) and rely on the file inclusion process (makefile)
   to bring the correct architecture in
 
   ----------------------------------------------------
-  usb_uart u_u (
+  usb_dfu u_u (
     .clk_48mhz  (clk_48mhz),
     .reset      (reset),
 
@@ -31,7 +31,7 @@
 
 `include "../../pipe/rtl/pipe_defs.v"
 
-module usb_uart  #( parameter PipeSpec = `PS_d8 ) (
+module usb_dfu  #( parameter PipeSpec = `PS_d8 ) (
         input  clk_48mhz,
         input reset,
 
@@ -57,7 +57,7 @@ module usb_uart  #( parameter PipeSpec = `PS_d8 ) (
     p_unpack_valid_ready #( .PipeSpec( PipeSpec ) ) in_unpack_valid_ready( .pipe(pipe_in), .valid(in_valid), .ready(in_ready) );
 
     // start and stop signals are ignored - packetization has to be escaped
-    usb_uart_np  u_u_np(
+    usb_dfu_np  u_u_np(
             clk_48mhz, reset,
 
             pin_usb_p, pin_usb_n,
@@ -73,23 +73,13 @@ module usb_uart  #( parameter PipeSpec = `PS_d8 ) (
 
 endmodule
 
-module usb_uart_np (
+module usb_dfu_np (
   input  clk_48mhz,
   input reset,
 
   // USB pins
   inout  pin_usb_p,
   inout  pin_usb_n,
-
-  // uart pipeline in (out of the device, into the host)
-  input [7:0] uart_in_data,
-  input       uart_in_valid,
-  output      uart_in_ready,
-
-  // uart pipeline out (into the device, out of the host)
-  output [7:0] uart_out_data,
-  output       uart_out_valid,
-  input        uart_out_ready,
 
   output [11:0] debug
 );
@@ -102,7 +92,7 @@ module usb_uart_np (
 
     // wire [11:0] debug_dum;
 
-    usb_uart_core_np u_u_c_np (
+    usb_dfu_core_np u_u_c_np (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
@@ -112,16 +102,6 @@ module usb_uart_np (
         .usb_p_rx(usb_p_rx),
         .usb_n_rx(usb_n_rx),
         .usb_tx_en(usb_tx_en),
-
-        // uart pipeline in
-        .uart_in_data( uart_in_data ),
-        .uart_in_valid( uart_in_valid ),
-        .uart_in_ready( uart_in_ready ),
-
-        // uart pipeline out
-        .uart_out_data( uart_out_data ),
-        .uart_out_valid( uart_out_valid ),
-        .uart_out_ready( uart_out_ready ),
 
         .debug( debug )
     );

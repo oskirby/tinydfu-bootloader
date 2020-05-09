@@ -2,7 +2,7 @@
 ## Make and program TinyFPGA BX
 ##
 
-BASENAME = usbserial
+BASENAME = tinydfu
 TARGETNAME = $(BASENAME)_tbx
 PROJTOP = $(TARGETNAME)
 
@@ -22,8 +22,8 @@ SOURCES = \
 	$(RTL_USB_DIR)/usb_reset_det.v \
 	$(RTL_USB_DIR)/usb_dfu_ctrl_ep.v \
 	$(RTL_USB_DIR)/usb_spiflash_bridge.v \
-	$(RTL_USB_DIR)/usb_uart_core.v \
-	$(RTL_USB_DIR)/usb_uart_i40.v \
+	$(RTL_USB_DIR)/usb_dfu_core.v \
+	$(RTL_USB_DIR)/usb_dfu_i40.v \
  	pll.v
 
 SRC = $(PROJTOP).v $(SOURCES)

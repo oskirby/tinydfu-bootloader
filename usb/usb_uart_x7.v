@@ -1,54 +1,34 @@
 /*
-   usb_uart_x7
+   usb_dfu_x7
 
-  Simple wrapper around the usb_uart which incorporates the Pin driver logic
+  Simple wrapper around the usb_dfu which incorporates the Pin driver logic
   so this doesn't clutter the top level circuit
 
-  Make the signature generic (usb_uart) and rely on the file inclusion process (makefile)
+  Make the signature generic (usb_dfu) and rely on the file inclusion process (makefile)
   to bring the correct architecture in
 
   The layer above has to assert the Host Pull Up line
 
-    usb_uart u_u (
+    usb_dfu u_u (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
         // pins
         .pin_usb_p( pin_usb_p ),
         .pin_usb_n( pin_usb_n ),
-
-        // uart pipeline in
-        .uart_in_data( uart_in_data ),
-        .uart_in_valid( uart_in_valid ),
-        .uart_in_ready( uart_in_ready ),
-
-        // uart pipeline out
-        .uart_out_data( uart_out_data ),
-        .uart_out_valid( uart_out_valid ),
-        .uart_out_ready( uart_out_ready ),
     );
 
 */
 
 `include "../../pipe/rtl/pipe_defs.v"
 
-module usb_uart (
+module usb_dfu (
         input  clk_48mhz,
         input reset,
 
         // USB pins
         inout  pin_usb_p,
         inout  pin_usb_n,
-
-        // uart pipeline in (out of the device, into the host)
-        input [7:0] uart_in_data,
-        input       uart_in_valid,
-        output      uart_in_ready,
-
-        // uart pipeline out (into the device, out of the host)
-        output [7:0] uart_out_data,
-        output       uart_out_valid,
-        input        uart_out_ready,
 
         output [11:0] debug
     );
@@ -61,7 +41,7 @@ module usb_uart (
 
     //wire [3:0] debug;
 
-    usb_uart_core_np u_u_c_np (
+    usb_dfu_core_np u_u_c_np (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
@@ -71,16 +51,6 @@ module usb_uart (
         .usb_p_rx(usb_p_rx),
         .usb_n_rx(usb_n_rx),
         .usb_tx_en(usb_tx_en),
-
-        // uart pipeline in
-        .uart_in_data( uart_in_data ),
-        .uart_in_valid( uart_in_valid ),
-        .uart_in_ready( uart_in_ready ),
-
-        // uart pipeline out
-        .uart_out_data( uart_out_data ),
-        .uart_out_valid( uart_out_valid ),
-        .uart_out_ready( uart_out_ready ),
 
         .debug( debug )
     );

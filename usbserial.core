@@ -1,6 +1,6 @@
 CAPI=2:
 
-name : ::usbserial
+name : ::tinydfu
 
 filesets:
   rtl:
@@ -16,18 +16,18 @@ filesets:
       - usb/usb_fs_tx_mux.v
       - usb/usb_fs_tx.v
       - usb/usb_reset_det.v
-      - usb/usb_serial_ctrl_ep.v
-      - usb/usb_uart_bridge_ep.v
-      - usb/usb_uart_core.v
+      - usb/usb_dfu_ctrl_ep.v
+      - usb/usb_spiflash_bridge.v
+      - usb/usb_dfu_core.v
     file_type : verilogSource
 
-  generic: {files: [usb/usb_uart.v     : {file_type : verilogSource}]}
-  ecp5 :   {files: [usb/usb_uart_ecp5.v: {file_type : verilogSource}]}
-  ice40:   {files: [usb/usb_uart_i40.v : {file_type : verilogSource}]}
+  generic: {files: [usb/usb_dfu.v     : {file_type : verilogSource}]}
+  ecp5 :   {files: [usb/usb_dfu_ecp5.v: {file_type : verilogSource}]}
+  ice40:   {files: [usb/usb_dfu_i40.v : {file_type : verilogSource}]}
 
   tinyfpga_bx:
     files:
-      - usbserial_tbx.v : {file_type : verilogSource}
+      - tinydfu_tbx.v : {file_type : verilogSource}
       - pins.pcf: {file_type : PCF}
     depend: [fusesoc:utils:generators]
 
@@ -42,7 +42,7 @@ targets:
     tools:
       verilator:
         mode : lint-only
-    toplevel: usb_uart
+    toplevel: usb_dfu
 
   synth:
     default_tool: icestorm
@@ -54,7 +54,7 @@ targets:
     tools:
       icestorm: {pnr : none}
       vivado: {pnr : none}
-    toplevel: usb_uart
+    toplevel: usb_dfu
 
   tinyfpga_bx:
     default_tool: icestorm
@@ -65,7 +65,7 @@ targets:
       icestorm:
         pnr: next
         nextpnr_options: [--freq, 48, --lp8k, --opt-timing, --package, cm81]
-    toplevel: usbserial_tbx
+    toplevel: tinydfu_tbx
 
 generate:
   tinyfpga_bx_pll:

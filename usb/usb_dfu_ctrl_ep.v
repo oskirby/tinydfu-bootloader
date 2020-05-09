@@ -395,7 +395,7 @@ module usb_dfu_ctrl_ep #(
 
         'h102 : begin
           // DFU_UPLOAD
-          if (dfu_state == DFU_STATE_dfuUPLOAD_IDLE) begin
+          if (dfu_mem['h004] == DFU_STATE_dfuUPLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
@@ -406,7 +406,7 @@ module usb_dfu_ctrl_ep #(
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_start <= wValue;
-            dfu_state <= DFU_STATE_dfuUPLOAD_IDLE;
+            dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
           end
         end
 
@@ -431,7 +431,7 @@ module usb_dfu_ctrl_ep #(
           rom_length <= 0;
 
           // Return to the dfuIDLE state.
-          dfu_state <= DFU_STATE_dfuIDLE;
+          dfu_mem['h004] <= DFU_STATE_dfuIDLE;
         end 
 
         default begin
@@ -469,7 +469,7 @@ module usb_dfu_ctrl_ep #(
 
   reg [7:0] ep_rom[255:0];
   reg [7:0] str_rom[255:0];
-  reg [7:0] dfu_mem[15:0];
+  reg [7:0] dfu_mem[7:0];
 
   // Mux the data being read
   always @* begin
@@ -555,16 +555,20 @@ module usb_dfu_ctrl_ep #(
       str_rom['h00C] <= "c";  str_rom['h00D] <= 0;
       str_rom['h00E] <= "e";  str_rom['h00F] <= 0;
 
-      str_rom['h020] <= 18;  // bLength
+      str_rom['h020] <= 26;  // bLength
       str_rom['h021] <= 3;   // bDescriptorType == STRING
       str_rom['h022] <= "T";  str_rom['h023] <= 0;
       str_rom['h024] <= "i";  str_rom['h025] <= 0;
       str_rom['h026] <= "n";  str_rom['h027] <= 0;
       str_rom['h028] <= "y";  str_rom['h029] <= 0;
-      str_rom['h02A] <= "F";  str_rom['h02B] <= 0;
-      str_rom['h02C] <= "P";  str_rom['h02D] <= 0;
-      str_rom['h02E] <= "G";  str_rom['h02F] <= 0;
-      str_rom['h030] <= "A";  str_rom['h031] <= 0;
+      str_rom['h02A] <= "D";  str_rom['h02B] <= 0;
+      str_rom['h02C] <= "F";  str_rom['h02D] <= 0;
+      str_rom['h02E] <= "U";  str_rom['h02F] <= 0;
+      str_rom['h030] <= " ";  str_rom['h031] <= 0;
+      str_rom['h032] <= "B";  str_rom['h033] <= 0;
+      str_rom['h034] <= "o";  str_rom['h035] <= 0;
+      str_rom['h036] <= "o";  str_rom['h037] <= 0;
+      str_rom['h038] <= "t";  str_rom['h039] <= 0;
 
       str_rom['h040] <= 14;  // bLength
       str_rom['h041] <= 3;   // bDescriptorType == STRING

@@ -1,10 +1,10 @@
 /*
-    USB Serial
+    TinyDFU Bootloader
 
-    Wrapping usb/usb_uart_ice40.v to create a loopback.
+    Wrapping usb/usb_dfu_ice40.v.
 */
 
-module usbserial_tbx (
+module tinydfu_tbx (
         input  pin_clk,
 
         inout  pin_usb_p,
@@ -71,21 +71,14 @@ module usbserial_tbx (
         if ( clk_locked )
             reset_cnt <= reset_cnt + reset;
 
-    // uart pipeline in
-    wire [7:0] uart_in_data;
-    wire       uart_in_valid;
-    wire       uart_in_ready;
-
-    // assign debug = { uart_in_valid, uart_in_ready, reset, clk_48mhz };
-
     wire usb_p_tx;
     wire usb_n_tx;
     wire usb_p_rx;
     wire usb_n_rx;
     wire usb_tx_en;
 
-    // usb uart - this instanciates the entire USB device.
-    usb_uart uart (
+    // usb DFU - this instanciates the entire USB device.
+    usb_dfu dfu (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
@@ -98,15 +91,6 @@ module usbserial_tbx (
         .spi_clk( pin_15_sck ),
         .spi_mosi( pin_14_mosi ),
         .spi_miso( pin_17_miso ),  
-
-        // uart pipeline in
-        .uart_in_data( uart_in_data ),
-        .uart_in_valid( uart_in_valid ),
-        .uart_in_ready( uart_in_ready ),
-
-        .uart_out_data( uart_in_data ),
-        .uart_out_valid( uart_in_valid ),
-        .uart_out_ready( uart_in_ready  ),
 
         .debug( debug )
     );

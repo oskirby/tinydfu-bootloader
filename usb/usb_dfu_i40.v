@@ -1,34 +1,24 @@
 /*
-   usb_uart_i40
+   usb_dfu_i40
 
-  Simple wrapper around the usb_uart which incorporates the Pin driver logic
+  Simple wrapper around the usb_dfu which incorporates the Pin driver logic
   so this doesn't clutter the top level circuit
 
   The layer above has to assert the Host Pull Up line
 
   ----------------------------------------------------
-  usb_uart_i40 u_u_i40 (
+  usb_dfu_i40 u_u_i40 (
     .clk_48mhz  (clk_48mhz),
     .reset      (reset),
 
     // pins
     .pin_usb_p( pin_usb_p ),
     .pin_usb_n( pin_usb_n ),
-
-    // uart pipeline in
-    .uart_in_data( uart_in_data ),
-    .uart_in_valid( uart_in_valid ),
-    .uart_in_ready( uart_in_ready ),
-
-    // uart pipeline out
-    .uart_out_data( uart_out_data ),
-    .uart_out_valid( uart_out_valid ),
-    .uart_out_ready( uart_out_ready ),
   );
 
 */
 
-module usb_uart (
+module usb_dfu (
   input  clk_48mhz,
   input reset,
 
@@ -42,16 +32,6 @@ module usb_uart (
   output spi_mosi,
   input spi_miso,
 
-  // uart pipeline in (out of the device, into the host)
-  input [7:0] uart_in_data,
-  input       uart_in_valid,
-  output      uart_in_ready,
-
-  // uart pipeline out (into the device, out of the host)
-  output [7:0] uart_out_data,
-  output       uart_out_valid,
-  input        uart_out_ready,
-
   output [11:0] debug
 );
 
@@ -63,7 +43,7 @@ module usb_uart (
 
     //wire [3:0] debug;
 
-    usb_uart_core uart (
+    usb_dfu_core dfu (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
@@ -79,16 +59,6 @@ module usb_uart (
         .spi_clk(spi_clk),
         .spi_mosi(spi_mosi),
         .spi_miso(spi_miso),
-
-        // uart pipeline in
-        .uart_in_data( uart_in_data ),
-        .uart_in_valid( uart_in_valid ),
-        .uart_in_ready( uart_in_ready ),
-
-        // uart pipeline out
-        .uart_out_data( uart_out_data ),
-        .uart_out_valid( uart_out_valid ),
-        .uart_out_ready( uart_out_ready ),
 
         .debug( debug )
     );
