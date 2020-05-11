@@ -1,5 +1,6 @@
 module usb_spiflash_bridge #(
-  parameter SECTOR_SIZE = 4096
+  parameter SECTOR_SIZE = 4096,
+  parameter PAGE_SIZE = 256
 ) (
   input clk,
   input reset,
@@ -16,7 +17,6 @@ module usb_spiflash_bridge #(
   // control interface
   ////////////////////
   input [15:0] address,         // Flash page address
-  output reg busy,              // High whenever the SPI flash core is unable to accept read or write.
 
   ////////////////////
   // data read interfce
@@ -30,12 +30,18 @@ module usb_spiflash_bridge #(
   // data write interfce
   ////////////////////
   input wr_request,             // High to request writing to the flash device.
+  output wr_busy,               // High to indicate that an erase/program is in progress.
   input wr_data_avail,          // High whenever the upstream has more data to write.
   output wr_data_get,           // High whenever data is flowing into the flash device.
   input [7:0] wr_data,          // Input data bus when writing.
 
   output [7:0] debug
 );
+
+  // SPI flash geometry.
+  localparam SECTOR_PAGE_COUNT = (SECTOR_SIZE / PAGE_SIZE);
+  localparam SECTOR_BITS = $clog2(SECTOR_SIZE);
+  localparam PAGE_BITS   = $clog2(PAGE_SIZE);
 
   // SPI flash commands
   localparam FLASH_CMD_WRITE_ENABLE         = 8'h06;
@@ -75,28 +81,38 @@ module usb_spiflash_bridge #(
 
   // SPI flash state machine
   localparam FLASH_STATE_IDLE = 0;
-  localparam FLASH_STATE_START = 1;
-  localparam FLASH_STATE_READ_COMMAND = 2;
-  localparam FLASH_STATE_READ_DATA = 3;
-  localparam FLASH_STATE_ERASE_ENABLE = 4;
-  localparam FLASH_STATE_ERASE_COMMAND = 5;
-  localparam FLASH_STATE_ERASE_BUSY = 6;
+  localparam FLASH_STATE_READ_COMMAND = 1;
+  localparam FLASH_STATE_READ_DATA = 2;
+  localparam FLASH_STATE_ERASE_ENABLE = 3;
+  localparam FLASH_STATE_ERASE_COMMAND = 4;
+  localparam FLASH_STATE_ERASE_BUSY = 5;
+  localparam FLASH_STATE_WRITE_ENABLE = 6;
   localparam FLASH_STATE_WRITE_COMMAND = 7;
   localparam FLASH_STATE_WRITE_DATA = 8;
+  localparam FLASH_STATE_WRITE_BUSY = 9;
   
   reg [3:0] flash_state = FLASH_STATE_IDLE;
   reg [3:0] flash_state_next = FLASH_STATE_IDLE;
 
-  wire [23:0] byte_address = (address * SECTOR_SIZE);
+  reg [23:0] byte_address = 0;
+  wire [SECTOR_BITS-PAGE_BITS-1:0] page_num = byte_address[SECTOR_BITS-1:PAGE_BITS];
+  wire byte_addr_latch = 0;
+  always @(posedge clk) if (byte_addr_latch) byte_address <= (address * PAGE_SIZE);
+  
+  rising_edge_detector detect_address_latch (
+    .clk(clk),
+    .in(wr_request || rd_request),
+    .out(byte_addr_latch)
+  );
 
-  assign debug[0] = transfer_done;
-  assign debug[1] = rd_data_free;
-  assign debug[2] = rd_data_put;
+  assign debug[0] = (flash_state == FLASH_STATE_ERASE_BUSY);
+  assign debug[1] = wr_data_avail;
+  assign debug[2] = wr_data_get;
 
-  reg [7:0] command_bits = 0;   // Number of bits to transfer in the command stage.
-  reg [3:0] command_csel = 1;   // Number of clocks to hold CSEL high after the command (or zero to leave CSEL active).
+  reg [7:0] command_bits;       // Number of bits to transfer in the command stage.
+  reg [3:0] command_csel;       // Number of clocks to hold CSEL high after the command (or zero to leave CSEL active).
   reg [63:0] command_buf;       // Command data to be shifted out of MOSI.
-  reg command_start = 0;        // Pulsed high to start a new command.
+  reg command_start;            // Pulsed high to start a new command.
 
   reg [63:0] read_buf = 0;
   reg [63:0] write_buf = 0;
@@ -106,7 +122,8 @@ module usb_spiflash_bridge #(
   wire transfer_done;
   
   assign rd_data_put = (flash_state == FLASH_STATE_READ_DATA) && transfer_done;
-  assign wr_data_get = (flash_state == FLASH_STATE_WRITE_DATA) && transfer_done;
+  assign wr_data_get = wr_data_avail && (wr_cache_write_addr < (PAGE_SIZE-1));
+  assign wr_busy = (flash_state >= FLASH_STATE_ERASE_ENABLE);
   always @* rd_data <= read_buf[7:0];
 
   falling_edge_detector detect_transfer_done (
@@ -114,6 +131,34 @@ module usb_spiflash_bridge #(
     .in(transfer_busy),
     .out(transfer_done)
   );
+
+  // Data cache, holds a page of data to be written.
+  reg [7:0]   wr_cache_read_addr = 0;
+  reg [7:0]   wr_cache_write_addr = 0;
+  wire [15:0] wr_cache_read_data;
+  SB_RAM40_4K #(
+    .READ_MODE(32'd1),  // Select 512x8 mode.
+    .WRITE_MODE(32'd1), // Select 512x8 mode.
+  ) wr_cache_mem(
+    // Read data port (cache -> SPI flash)
+    .RDATA(wr_cache_read_data),
+    .RADDR(wr_cache_read_addr),
+    .RCLK(clk),
+    .RCLKE(1'b1),
+    .RE(1'b1),
+
+    // Write data port (USB endpoint -> cache),
+    .WDATA({8'b0, wr_data}),
+    .WADDR(wr_cache_write_addr),
+    .WCLK(clk),
+    .WCLKE(wr_request),
+    .WE(wr_data_get)
+  );
+
+  always @(posedge clk) begin
+    if (flash_state == FLASH_STATE_WRITE_BUSY) wr_cache_write_addr <= 0;
+    else if (wr_data_get) wr_cache_write_addr <= wr_cache_write_addr + 1;
+  end
 
   always @* begin
     command_start <= 0;
@@ -131,7 +176,8 @@ module usb_spiflash_bridge #(
           command_buf  <= {24'b0, FLASH_CMD_FAST_READ, byte_address, 8'b0};
         
         end else if (wr_request) begin
-          flash_state_next <= FLASH_STATE_ERASE_ENABLE;
+          // We need to erase when starting a new sector.
+          flash_state_next <= (page_num == 0) ? FLASH_STATE_ERASE_ENABLE : FLASH_STATE_WRITE_ENABLE;
           command_start <= 1;
           command_bits  <= 8;
           command_buf   <= {56'b0, FLASH_CMD_WRITE_ENABLE};
@@ -189,7 +235,40 @@ module usb_spiflash_bridge #(
           command_bits  <= 16;
           command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
         end else begin
+          flash_state_next <= FLASH_STATE_WRITE_ENABLE;
+          command_start <= 1;
+          command_bits  <= 8;
+          command_buf   <= {56'b0, FLASH_CMD_WRITE_ENABLE};
+        end
+      end
+    
+      FLASH_STATE_WRITE_ENABLE : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_WRITE_COMMAND;
+          command_start <= 1;
+          command_bits  <= 32;
+          command_csel  <= 0;
+          command_buf   <= {32'b0, FLASH_CMD_PAGE_PROGRAM, byte_address};
+        end else begin
+          flash_state_next <= FLASH_STATE_WRITE_ENABLE;
+        end
+      end
+    
+      FLASH_STATE_WRITE_COMMAND : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_WRITE_DATA;
+        end else begin
+          flash_state_next <= FLASH_STATE_WRITE_COMMAND;
+        end
+      end
+
+      FLASH_STATE_WRITE_DATA : begin
+        // TODO: Detect EOF
+        if (!transfer_busy && !wr_request && (wr_cache_read_addr == wr_cache_write_addr)) begin
+          // TODO: Poll for write complete.
           flash_state_next <= FLASH_STATE_IDLE;
+        end else begin
+          flash_state_next <= FLASH_STATE_WRITE_DATA;
         end
       end
 
@@ -213,6 +292,7 @@ module usb_spiflash_bridge #(
       bitcount <= command_bits;
       cseldelay <= command_csel;
       write_buf <= command_buf;
+      wr_cache_read_addr <= 0;
       spi_csel <= 1'b0;
       spi_clk <= 1'b0;
       spi_mosi <= command_buf[command_bits-1];
@@ -241,5 +321,10 @@ module usb_spiflash_bridge #(
     // Transfer another byte if we have made it to the data stage.
     // This is hacky, but the data free signal needs a clock to propagate after an rd_data_put.
     if ((flash_state == FLASH_STATE_READ_DATA) && !bitcount && !rd_data_put && rd_data_free) bitcount <= 8;
+    if ((flash_state == FLASH_STATE_WRITE_DATA) && !bitcount && (wr_cache_read_addr < wr_cache_write_addr)) begin
+      write_buf <= {56'b0, wr_cache_read_data[7:0]};
+      bitcount <= 8;
+      wr_cache_read_addr <= wr_cache_read_addr + 1;
+    end
   end
 endmodule

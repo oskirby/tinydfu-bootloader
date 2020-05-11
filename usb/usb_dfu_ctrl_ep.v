@@ -1,8 +1,8 @@
 module usb_dfu_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
   parameter MAX_OUT_PACKET_SIZE = 32,
-  parameter SPI_SECTOR_SIZE = 4096,
-  parameter SPI_FLASH_SIZE = 4, // In sectors
+  parameter SPI_PAGE_SIZE = 256,
+  parameter SPI_FLASH_SIZE = 64, // In pages
 ) (
   input clk,
   input reset,
@@ -101,7 +101,7 @@ module usb_dfu_ctrl_ep #(
   assign dev_addr = dev_addr_i;
 
   assign out_ep_req = out_ep_data_avail;
-  assign out_ep_data_get = out_ep_data_avail;
+  assign out_ep_data_get = (ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE) ? dfu_spi_wr_data_get : out_ep_data_avail;
   reg out_ep_data_valid = 0;
   always @(posedge clk) out_ep_data_valid <= out_ep_data_avail && out_ep_grant;
 
@@ -145,13 +145,13 @@ module usb_dfu_ctrl_ep #(
   assign in_data_stage = has_data_stage && bmRequestType[7];
 
   reg [15:0] rom_length = 0;
-  reg [15:0] max_length = 0;
+  reg [15:0] data_length = 0;
 
-  wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (max_length == 16'b0));
+  wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (data_length == 16'b0));
+  wire more_data_to_recv = (ctrl_xfr_state == DATA_OUT || ctrl_xfr_state == STATUS_IN) && (data_length != 16'b0);
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
-
   rising_edge_detector detect_in_data_transfer_done (
     .clk(clk),
     .in(all_data_sent),
@@ -184,8 +184,13 @@ module usb_dfu_ctrl_ep #(
   wire [7:0] dfu_spi_wr_data;
   wire dfu_spi_wr_data_get;
 
+  wire [7:0] dfu_debug;
+  assign debug[0] = dfu_debug[0];
+  assign debug[1] = out_ep_data_avail;
+  assign debug[2] = all_data_recv;
+
   usb_spiflash_bridge #(
-    .SECTOR_SIZE(SPI_SECTOR_SIZE)
+    .PAGE_SIZE(SPI_PAGE_SIZE)
   ) dfu_spiflash_bridge (
     .clk(clk),
     .reset(reset),
@@ -202,12 +207,12 @@ module usb_dfu_ctrl_ep #(
     .rd_data_put(dfu_spi_rd_data_put),
     .rd_data(dfu_spi_rd_data),
 
-    .wr_request(ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE),
+    .wr_request(more_data_to_recv && rom_mux == ROM_FIRMWARE),
     .wr_data_avail(out_ep_data_avail),
     .wr_data_get(dfu_spi_wr_data_get),
     .wr_data(out_ep_data),
 
-    .debug(debug)
+    .debug(dfu_debug)
   );
 
   reg save_dev_addr = 0;
@@ -283,7 +288,7 @@ module usb_dfu_ctrl_ep #(
 
       STATUS_IN : begin
         if (in_ep_acked) begin
-          ctrl_xfr_state_next <= IDLE;
+          ctrl_xfr_state_next <= more_data_to_recv ? DATA_OUT : IDLE;
           status_stage_end <= 1;
 
         end else begin
@@ -324,7 +329,7 @@ module usb_dfu_ctrl_ep #(
     end
 
     if (setup_stage_end) begin
-      max_length <= wLength;
+      data_length <= wLength;
       
       // Standard Requests
       case ({bmRequestType[6:5], bRequest})
@@ -405,7 +410,7 @@ module usb_dfu_ctrl_ep #(
           if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_SECTOR_SIZE;
+            rom_length <= SPI_PAGE_SIZE;
 
             // Switch to the dfuDNLOAD-IDLE state.
             dfu_block_start <= wValue;
@@ -417,7 +422,7 @@ module usb_dfu_ctrl_ep #(
           end else begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_SECTOR_SIZE;
+            rom_length <= SPI_PAGE_SIZE;
           end
         end
 
@@ -426,7 +431,7 @@ module usb_dfu_ctrl_ep #(
           if (dfu_mem['h004] != DFU_STATE_dfuUPLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_SECTOR_SIZE;
+            rom_length <= SPI_PAGE_SIZE;
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_start <= wValue;
@@ -438,7 +443,7 @@ module usb_dfu_ctrl_ep #(
           end else begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_SECTOR_SIZE;
+            rom_length <= SPI_PAGE_SIZE;
           end
         end
 
@@ -477,7 +482,10 @@ module usb_dfu_ctrl_ep #(
     if (in_ep_grant && in_ep_data_put) begin
       rom_addr <= rom_addr + 1;
       rom_length <= rom_length - 1;
-      max_length <= max_length - 1;
+      data_length <= data_length - 1;
+    end
+    if (!out_ep_setup && out_ep_grant && out_ep_data_get) begin
+      data_length <= data_length - 1;
     end
 
     if (status_stage_end) begin
@@ -565,8 +573,8 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h026] <= 'h0b;				// bmAttributes
       ep_rom['h027] <= 255;         // wDetachTimeout[0]
       ep_rom['h028] <= 0;           // wDetachTimeout[1]
-      ep_rom['h029] <= SPI_SECTOR_SIZE >> 0; // wTransferSize[0]
-      ep_rom['h02A] <= SPI_SECTOR_SIZE >> 8; // wTransferSize[1]
+      ep_rom['h029] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
+      ep_rom['h02A] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
       ep_rom['h02B] <= 'h10;        // bcdDFUVersion[0]
       ep_rom['h02C] <= 'h01;        // bcdDFUVersion[1]
 
