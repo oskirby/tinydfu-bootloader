@@ -105,7 +105,7 @@ module usb_spiflash_bridge #(
     .out(byte_addr_latch)
   );
 
-  assign debug[0] = (flash_state == FLASH_STATE_ERASE_BUSY);
+  assign debug[0] = wr_busy;
   assign debug[1] = wr_data_avail;
   assign debug[2] = wr_data_get;
 
@@ -266,9 +266,25 @@ module usb_spiflash_bridge #(
         // TODO: Detect EOF
         if (!transfer_busy && !wr_request && (wr_cache_read_addr == wr_cache_write_addr)) begin
           // TODO: Poll for write complete.
-          flash_state_next <= FLASH_STATE_IDLE;
+          flash_state_next <= FLASH_STATE_WRITE_BUSY;
+          command_start <= 1;
+          command_bits  <= 16;
+          command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
         end else begin
           flash_state_next <= FLASH_STATE_WRITE_DATA;
+        end
+      end
+
+      FLASH_STATE_WRITE_BUSY : begin
+        if (transfer_busy) begin
+          flash_state_next <= FLASH_STATE_WRITE_BUSY;
+        end else if (read_buf[0]) begin
+          flash_state_next <= FLASH_STATE_WRITE_BUSY;
+          command_start <= 1;
+          command_bits  <= 16;
+          command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
+        end else begin
+          flash_state_next <= FLASH_STATE_IDLE;
         end
       end
 

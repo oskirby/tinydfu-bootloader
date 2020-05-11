@@ -74,7 +74,7 @@ module usb_dfu_ctrl_ep #(
   localparam DFU_STATE_appIDLE = 'h00;
   localparam DFU_STATE_appDETACH = 'h01;
   localparam DFU_STATE_dfuIDLE = 'h02;
-  localparam DFU_STATE_dfuDOWNLOAD_SYNC = 'h03;
+  localparam DFU_STATE_dfuDNLOAD_SYNC = 'h03;
   localparam DFU_STATE_dfuDNBUSY = 'h04;
   localparam DFU_STATE_dfuDNLOAD_IDLE = 'h05;
   localparam DFU_STATE_dfuMANIFEST_SYNC = 'h06;
@@ -183,11 +183,18 @@ module usb_dfu_ctrl_ep #(
   wire dfu_spi_rd_data_put;
   wire [7:0] dfu_spi_wr_data;
   wire dfu_spi_wr_data_get;
+  wire dfu_spi_wr_busy;
+  wire dfu_spi_wr_done;
+  falling_edge_detector detect_wr_busy_done (
+    .clk(clk),
+    .in(dfu_spi_wr_busy),
+    .out(dfu_spi_wr_done)
+  );
 
   wire [7:0] dfu_debug;
-  assign debug[0] = dfu_debug[0];
+  assign debug[0] = dfu_spi_wr_done;
   assign debug[1] = out_ep_data_avail;
-  assign debug[2] = all_data_recv;
+  assign debug[2] = more_data_to_recv;
 
   usb_spiflash_bridge #(
     .PAGE_SIZE(SPI_PAGE_SIZE)
@@ -208,6 +215,7 @@ module usb_dfu_ctrl_ep #(
     .rd_data(dfu_spi_rd_data),
 
     .wr_request(more_data_to_recv && rom_mux == ROM_FIRMWARE),
+    .wr_busy(dfu_spi_wr_busy),
     .wr_data_avail(out_ep_data_avail),
     .wr_data_get(dfu_spi_wr_data_get),
     .wr_data(out_ep_data),
@@ -328,6 +336,11 @@ module usb_dfu_ctrl_ep #(
       setup_data_addr <= setup_data_addr + 1;
     end
 
+    // Handle DFU state transitions.
+    if (dfu_spi_wr_done) begin
+      if (dfu_mem['h004] == DFU_STATE_dfuDNBUSY) dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_SYNC;
+    end
+
     if (setup_stage_end) begin
       data_length <= wLength;
       
@@ -407,22 +420,25 @@ module usb_dfu_ctrl_ep #(
 
         'h101 : begin
           // DFU_DNLOAD
-          if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
+          if (dfu_mem['h004] == DFU_STATE_dfuIDLE) begin
+            // Starting a new download.
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
 
-            // Switch to the dfuDNLOAD-IDLE state.
             dfu_block_start <= wValue;
-            dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_IDLE;
-          end else if (dfu_block_done) begin
+            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
+          end else if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
+            // We are not ready to receive another block
+            out_ep_stall <= 1;
+            dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
+            dfu_mem['h004] <= DFU_STATE_dfuERROR;
+          end else if (wLength == 0) begin
+            // Download is complete.
             rom_mux    <= ROM_ENDPOINT;
             rom_addr   <= 0;
             rom_length <= 0;
-          end else begin
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            dfu_mem['h004] <= DFU_STATE_dfuMANIFEST_SYNC;
           end
         end
 
@@ -452,6 +468,18 @@ module usb_dfu_ctrl_ep #(
           rom_mux    <= ROM_DFUSTATE;
           rom_addr   <= 'h00;
           rom_length <= 6;
+          if (dfu_mem['h004] == DFU_STATE_dfuDNLOAD_SYNC) dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_IDLE;
+          if (dfu_mem['h004] == DFU_STATE_dfuMANIFEST_SYNC) dfu_mem['h004] <= DFU_STATE_dfuIDLE;
+        end
+
+        'h104 : begin
+          // DFU_CLRSTATUS
+          rom_mux    <= ROM_ENDPOINT;
+          rom_addr   <= 'h00;
+          rom_length <= 0;
+          dfu_mem['h000] <= DFU_STATUS_OK;
+          dfu_mem['h004] <= DFU_STATE_dfuIDLE;
+
         end
 
         'h105 : begin
@@ -629,7 +657,7 @@ module usb_dfu_ctrl_ep #(
 
       // DFU State data
       dfu_mem['h000] <= DFU_STATUS_OK;      // bStatus
-      dfu_mem['h001] <= 0;                  // bwPollTimeout[0]
+      dfu_mem['h001] <= 1;                  // bwPollTimeout[0]
       dfu_mem['h002] <= 0;                  // bwPollTimeout[1]
       dfu_mem['h003] <= 0;                  // bwPollTimeout[2]
       dfu_mem['h004] <= DFU_STATE_dfuIDLE;  // bState
