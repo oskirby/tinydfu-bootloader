@@ -192,7 +192,7 @@ module usb_dfu_ctrl_ep #(
   );
 
   wire [7:0] dfu_debug;
-  assign debug[0] = dfu_spi_wr_done;
+  assign debug[0] = dfu_debug[0];
   assign debug[1] = out_ep_data_avail;
   assign debug[2] = more_data_to_recv;
 
@@ -433,12 +433,12 @@ module usb_dfu_ctrl_ep #(
             out_ep_stall <= 1;
             dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
             dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else if (wLength == 0) begin
+          end else begin
             // Download is complete.
-            rom_mux    <= ROM_ENDPOINT;
+            rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= 0;
-            dfu_mem['h004] <= DFU_STATE_dfuMANIFEST_SYNC;
+            rom_length <= SPI_PAGE_SIZE;
+            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end
         end
 
@@ -520,7 +520,6 @@ module usb_dfu_ctrl_ep #(
       setup_data_addr <= 0;
       rom_addr <= 0;
       rom_length <= 0;
-      max_length <= 0;
 
       if (save_dev_addr) begin
         save_dev_addr <= 0;

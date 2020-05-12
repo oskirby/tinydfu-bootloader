@@ -105,7 +105,7 @@ module usb_spiflash_bridge #(
     .out(byte_addr_latch)
   );
 
-  assign debug[0] = wr_busy;
+  assign debug[0] = (flash_state == FLASH_STATE_WRITE_COMMAND);
   assign debug[1] = wr_data_avail;
   assign debug[2] = wr_data_get;
 
@@ -122,7 +122,7 @@ module usb_spiflash_bridge #(
   wire transfer_done;
   
   assign rd_data_put = (flash_state == FLASH_STATE_READ_DATA) && transfer_done;
-  assign wr_data_get = wr_data_avail && (wr_cache_write_addr < (PAGE_SIZE-1));
+  assign wr_data_get = wr_data_avail && wr_request && (wr_cache_write_addr < (PAGE_SIZE-1));
   assign wr_busy = (flash_state >= FLASH_STATE_ERASE_ENABLE);
   always @* rd_data <= read_buf[7:0];
 
@@ -136,10 +136,9 @@ module usb_spiflash_bridge #(
   reg [7:0]   wr_cache_read_addr = 0;
   reg [7:0]   wr_cache_write_addr = 0;
   wire [15:0] wr_cache_read_data;
-  SB_RAM40_4K #(
-    .READ_MODE(32'd1),  // Select 512x8 mode.
-    .WRITE_MODE(32'd1), // Select 512x8 mode.
-  ) wr_cache_mem(
+  SB_RAM40_4K wr_cache_mem(
+    .MASK(16'h0000),
+
     // Read data port (cache -> SPI flash)
     .RDATA(wr_cache_read_data),
     .RADDR(wr_cache_read_addr),
