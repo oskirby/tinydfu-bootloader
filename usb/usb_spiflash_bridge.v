@@ -148,15 +148,26 @@ module usb_spiflash_bridge #(
 
     // Write data port (USB endpoint -> cache),
     .WDATA({8'b0, wr_data}),
-    .WADDR(wr_cache_write_addr),
+    .WADDR(wr_cache_waddr_latch),
     .WCLK(clk),
     .WCLKE(wr_request),
-    .WE(wr_data_get)
+    .WE(wr_cache_we_latch)
   );
+ 
+  reg [8:0] wr_cache_waddr_latch = 0;
+  reg [7:0] wr_cache_wdata_latch = 0;
+  reg wr_cache_we_latch = 0;
 
   always @(posedge clk) begin
+    wr_cache_we_latch <= 0;
+
     if (flash_state == FLASH_STATE_WRITE_BUSY) wr_cache_write_addr <= 0;
-    else if (wr_data_get) wr_cache_write_addr <= wr_cache_write_addr + 1;
+    else if (wr_data_get) begin
+      wr_cache_wdata_latch <= wr_data;
+      wr_cache_waddr_latch <= wr_cache_write_addr;
+      wr_cache_write_addr <= wr_cache_write_addr + 1;
+      wr_cache_we_latch <= 1'b1;
+    end
   end
 
   always @* begin
