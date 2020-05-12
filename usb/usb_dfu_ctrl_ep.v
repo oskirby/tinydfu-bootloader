@@ -148,7 +148,7 @@ module usb_dfu_ctrl_ep #(
   reg [15:0] data_length = 0;
 
   wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (data_length == 16'b0));
-  wire more_data_to_recv = (ctrl_xfr_state == DATA_OUT || ctrl_xfr_state == STATUS_IN) && (data_length != 16'b0);
+  wire more_data_to_recv = (ctrl_xfr_state == DATA_OUT) && (data_length != 16'b0);
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
@@ -193,8 +193,9 @@ module usb_dfu_ctrl_ep #(
 
   wire [7:0] dfu_debug;
   assign debug[0] = dfu_debug[0];
-  assign debug[1] = out_ep_data_avail;
-  assign debug[2] = more_data_to_recv;
+  assign debug[1] = more_data_to_recv;
+  assign debug[2] = out_ep_data_avail;
+  assign debug[3] = out_ep_acked;
 
   usb_spiflash_bridge #(
     .PAGE_SIZE(SPI_PAGE_SIZE)
@@ -284,7 +285,7 @@ module usb_dfu_ctrl_ep #(
       end
 
       DATA_OUT : begin
-        if (out_ep_acked) begin
+        if (!more_data_to_recv) begin
           ctrl_xfr_state_next <= STATUS_IN;
           send_zero_length_data_pkt <= 1;
           data_stage_end <= 1;
@@ -296,7 +297,7 @@ module usb_dfu_ctrl_ep #(
 
       STATUS_IN : begin
         if (in_ep_acked) begin
-          ctrl_xfr_state_next <= more_data_to_recv ? DATA_OUT : IDLE;
+          ctrl_xfr_state_next <= IDLE;
           status_stage_end <= 1;
 
         end else begin
