@@ -88,13 +88,10 @@ module usb_dfu_ctrl_ep #(
   reg [5:0] ctrl_xfr_state_next;
 
 
-
   reg setup_stage_end = 0;
   reg data_stage_end = 0;
   reg status_stage_end = 0;
   reg send_zero_length_data_pkt = 0;
-
-
 
   // the default control endpoint gets assigned the device address
   reg [6:0] dev_addr_i = 0;
@@ -135,8 +132,8 @@ module usb_dfu_ctrl_ep #(
 
   wire setup_pkt_start = pkt_start && out_ep_setup;
 
-  // wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
-  wire has_data_stage = |wLength;
+  wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
+  //wire has_data_stage = |wLength;
 
   wire out_data_stage;
   assign out_data_stage = has_data_stage && !bmRequestType[7];
@@ -148,7 +145,6 @@ module usb_dfu_ctrl_ep #(
   reg [15:0] data_length = 0;
 
   wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (data_length == 16'b0));
-  wire more_data_to_recv = (ctrl_xfr_state == DATA_OUT) && (data_length != 16'b0);
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
@@ -175,9 +171,9 @@ module usb_dfu_ctrl_ep #(
 
   wire [7:0] dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
+  reg [15:0] dfu_block_addr = 0;
   reg [15:0] dfu_block_start = 0;
-  wire [15:0] dfu_block_num = (wValue - dfu_block_start);
-  wire dfu_block_done = (dfu_block_num >= SPI_FLASH_SIZE);
+  reg [15:0] dfu_block_end = 0;
 
   wire [7:0] dfu_spi_rd_data;
   wire dfu_spi_rd_data_put;
@@ -193,8 +189,8 @@ module usb_dfu_ctrl_ep #(
 
   wire [7:0] dfu_debug;
   assign debug[0] = dfu_debug[0];
-  assign debug[1] = more_data_to_recv;
-  assign debug[2] = out_ep_data_avail;
+  assign debug[1] = dfu_block_addr[0];
+  assign debug[2] = dfu_debug[1];
   assign debug[3] = out_ep_acked;
 
   usb_spiflash_bridge #(
@@ -208,14 +204,14 @@ module usb_dfu_ctrl_ep #(
     .spi_mosi(spi_mosi),
     .spi_miso(spi_miso),
 
-    .address(dfu_block_num),
+    .address(dfu_block_addr),
 
     .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
     .rd_data_free(more_data_to_send && in_ep_data_free),
     .rd_data_put(dfu_spi_rd_data_put),
     .rd_data(dfu_spi_rd_data),
 
-    .wr_request(more_data_to_recv && rom_mux == ROM_FIRMWARE),
+    .wr_request(ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE),
     .wr_busy(dfu_spi_wr_busy),
     .wr_data_avail(out_ep_data_avail),
     .wr_data_get(dfu_spi_wr_data_get),
@@ -285,7 +281,7 @@ module usb_dfu_ctrl_ep #(
       end
 
       DATA_OUT : begin
-        if (!more_data_to_recv) begin
+        if (!data_length) begin
           ctrl_xfr_state_next <= STATUS_IN;
           send_zero_length_data_pkt <= 1;
           data_stage_end <= 1;
@@ -428,10 +424,14 @@ module usb_dfu_ctrl_ep #(
             rom_length <= SPI_PAGE_SIZE;
 
             dfu_block_start <= wValue;
+            dfu_block_end   <= wValue + SPI_FLASH_SIZE;
+            dfu_block_addr  <= 0;
             dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end else if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
             // We are not ready to receive another block
-            out_ep_stall <= 1;
+            rom_mux    <= ROM_ENDPOINT;
+            rom_addr   <= 'h00;
+            rom_length <= 'h00;
             dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
             dfu_mem['h004] <= DFU_STATE_dfuERROR;
           end else begin
@@ -439,6 +439,7 @@ module usb_dfu_ctrl_ep #(
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
+            dfu_block_addr <= (wValue - dfu_block_start);
             dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end
         end
@@ -452,8 +453,10 @@ module usb_dfu_ctrl_ep #(
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_start <= wValue;
+            dfu_block_end   <= wValue + SPI_FLASH_SIZE;
+            dfu_block_addr  <= 0;
             dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
-          end else if (dfu_block_done) begin
+          end else if (wValue >= dfu_block_end) begin
             rom_mux    <= ROM_ENDPOINT;
             rom_addr   <= 0;
             rom_length <= 0;
@@ -461,6 +464,7 @@ module usb_dfu_ctrl_ep #(
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
+            dfu_block_addr  <= (wValue - dfu_block_start);
           end
         end
 

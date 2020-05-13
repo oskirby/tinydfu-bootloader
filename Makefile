@@ -35,7 +35,7 @@ PACKAGE = sg48
 
 CLK_MHZ = 24
 
-all: $(PROJTOP).rpt $(PROJTOP).bin
+all: $(PROJTOP).rpt $(PROJTOP).bin $(PROJTOP).hex
 
 synth: $(PROJTOP).json
 
@@ -53,6 +53,9 @@ gui: $(PIN_DEF) $(PROJTOP).json
 
 %.rpt: %.asc
 	icetime -d $(DEVICE) -mtr $@ $<
+
+%.hex: %.bin
+	hexdump $^ > $@
 
 prog: $(PROJTOP).bin
 	tinyprog -p $<

@@ -93,20 +93,14 @@ module usb_spiflash_bridge #(
   
   reg [3:0] flash_state = FLASH_STATE_IDLE;
   reg [3:0] flash_state_next = FLASH_STATE_IDLE;
-
-  reg [23:0] byte_address = 0;
-  wire [SECTOR_BITS-PAGE_BITS-1:0] page_num = byte_address[SECTOR_BITS-1:PAGE_BITS];
-  wire byte_addr_latch = 0;
-  always @(posedge clk) if (byte_addr_latch) byte_address <= (address * PAGE_SIZE);
   
-  rising_edge_detector detect_address_latch (
-    .clk(clk),
-    .in(wr_request || rd_request),
-    .out(byte_addr_latch)
-  );
+  wire [23:0] byte_address;
+  wire [SECTOR_BITS-PAGE_BITS-1:0] page_num;
+  assign byte_address = address << PAGE_BITS;
+  assign page_num = address[SECTOR_BITS-PAGE_BITS-1:0];
 
   assign debug[0] = (flash_state == FLASH_STATE_WRITE_COMMAND);
-  assign debug[1] = wr_data_avail;
+  assign debug[1] = page_num[0];
   assign debug[2] = wr_data_get;
 
   reg [7:0] command_bits;       // Number of bits to transfer in the command stage.
