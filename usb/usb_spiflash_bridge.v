@@ -88,7 +88,8 @@ module usb_spiflash_bridge #(
   localparam FLASH_STATE_WRITE_ENABLE = 5;
   localparam FLASH_STATE_WRITE_COMMAND = 6;
   localparam FLASH_STATE_WRITE_DATA = 7;
-  localparam FLASH_STATE_WRITE_BUSY = 8;
+  localparam FLASH_STATE_WRITE_EOF = 8;
+  localparam FLASH_STATE_WRITE_BUSY = 9;
   
   reg [3:0] flash_state = FLASH_STATE_IDLE;
   reg [3:0] flash_state_next = FLASH_STATE_IDLE;
@@ -118,7 +119,7 @@ module usb_spiflash_bridge #(
   assign wr_busy = (flash_state >= FLASH_STATE_ERASE_ENABLE);
 
   // Data cache, holds a page of data to be written.
-  reg         wr_cache_read_empty = 0;
+  reg         wr_cache_empty = 0;
   reg [8:0]   wr_cache_read_addr = 0;
   reg [8:0]   wr_cache_write_addr = 0;
   wire [15:0] wr_cache_read_data;
@@ -146,7 +147,7 @@ module usb_spiflash_bridge #(
 
   always @(posedge clk) begin
     wr_cache_we_latch <= 0;
-    wr_cache_read_empty <= (wr_cache_read_addr == wr_cache_write_addr);
+    wr_cache_empty <= (wr_cache_read_addr == wr_cache_write_addr);
 
     if (flash_state == FLASH_STATE_WRITE_BUSY) wr_cache_write_addr <= 0;
     else if (wr_data_get) begin
@@ -252,15 +253,26 @@ module usb_spiflash_bridge #(
       end
 
       FLASH_STATE_WRITE_DATA : begin
-        // TODO: Detect EOF
-        if (!transfer_busy && !wr_request && wr_cache_read_empty) begin
-          // TODO: Poll for write complete.
+        if (!transfer_busy && !wr_request && wr_cache_empty) begin
+          flash_state_next <= FLASH_STATE_WRITE_EOF;
+          command_start <= 1;
+          command_bits  <= 0;
+          command_buf   <= 64'b0;
+          command_csel  <= 4;
+        end else begin
+          flash_state_next <= FLASH_STATE_WRITE_DATA;
+        end
+      end
+
+      FLASH_STATE_WRITE_EOF : begin
+        if (!transfer_busy) begin
           flash_state_next <= FLASH_STATE_WRITE_BUSY;
           command_start <= 1;
           command_bits  <= 16;
+          command_bits  <= 16;
           command_buf   <= {48'b0, FLASH_CMD_READ_SR1, 8'b0};
         end else begin
-          flash_state_next <= FLASH_STATE_WRITE_DATA;
+          flash_state_next <= FLASH_STATE_WRITE_EOF;
         end
       end
 
@@ -336,7 +348,7 @@ module usb_spiflash_bridge #(
         rd_data_ready <= 1'b1;
         bitcount <= 8;
       end
-      if ((flash_state == FLASH_STATE_WRITE_DATA) && !wr_cache_read_empty) begin
+      if ((flash_state == FLASH_STATE_WRITE_DATA) && !wr_cache_empty) begin
         write_buf <= {56'b0, wr_cache_read_data[7:0]};
         bitcount <= 8;
         wr_cache_read_addr <= wr_cache_read_addr + 1;
