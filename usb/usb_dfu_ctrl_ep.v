@@ -44,7 +44,6 @@ module usb_dfu_ctrl_ep #(
   output [7:0] debug,
 );
 
-
   localparam IDLE = 0;
   localparam SETUP_IN = 1;
   localparam SETUP_DONE = 2;
@@ -165,7 +164,7 @@ module usb_dfu_ctrl_ep #(
   localparam ROM_FIRMWARE = 3;
 
   reg [11:0] rom_addr = 0;
-  reg [7:0] rom_mux = ROM_ENDPOINT;
+  reg [3:0] rom_mux = ROM_ENDPOINT;
   wire rom_data_put;
   assign rom_data_put = (ctrl_xfr_state == DATA_IN && more_data_to_send) && in_ep_data_free;
 
@@ -484,7 +483,6 @@ module usb_dfu_ctrl_ep #(
           rom_length <= 0;
           dfu_mem['h000] <= DFU_STATUS_OK;
           dfu_mem['h004] <= DFU_STATE_dfuIDLE;
-
         end
 
         'h105 : begin
@@ -666,7 +664,6 @@ module usb_dfu_ctrl_ep #(
       dfu_mem['h003] <= 0;                  // bwPollTimeout[2]
       dfu_mem['h004] <= DFU_STATE_dfuIDLE;  // bState
       dfu_mem['h005] <= 0;                  // iString
-
   end
 
 endmodule

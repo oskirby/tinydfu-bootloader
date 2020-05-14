@@ -80,38 +80,42 @@ module usb_spiflash_bridge #(
   localparam FLASH_CMD_RESET_DEVICE         = 8'h99;
 
   // SPI flash state machine
-  localparam FLASH_STATE_IDLE = 0;
-  localparam FLASH_STATE_READ_DATA = 1;
-  localparam FLASH_STATE_ERASE_ENABLE = 2;
-  localparam FLASH_STATE_ERASE_COMMAND = 3;
-  localparam FLASH_STATE_ERASE_BUSY = 4;
-  localparam FLASH_STATE_WRITE_ENABLE = 5;
-  localparam FLASH_STATE_WRITE_COMMAND = 6;
-  localparam FLASH_STATE_WRITE_DATA = 7;
-  localparam FLASH_STATE_WRITE_EOF = 8;
-  localparam FLASH_STATE_WRITE_BUSY = 9;
+  localparam FLASH_STATE_INIT = 0;
+  localparam FLASH_STATE_IDLE = 1;
+  localparam FLASH_STATE_READ_DATA = 2;
+  localparam FLASH_STATE_READ_EOF = 3;
+  localparam FLASH_STATE_ERASE_ENABLE = 4;
+  localparam FLASH_STATE_ERASE_COMMAND = 5;
+  localparam FLASH_STATE_ERASE_BUSY = 6;
+  localparam FLASH_STATE_WRITE_ENABLE = 7;
+  localparam FLASH_STATE_WRITE_COMMAND = 8;
+  localparam FLASH_STATE_WRITE_DATA = 9;
+  localparam FLASH_STATE_WRITE_EOF = 10;
+  localparam FLASH_STATE_WRITE_BUSY = 11;
+  localparam FLASH_STATE_POWER_ON = 12;
   
-  reg [3:0] flash_state = FLASH_STATE_IDLE;
-  reg [3:0] flash_state_next = FLASH_STATE_IDLE;
+  reg [3:0] flash_rstdelay = 4'b1111;
+  reg [3:0] flash_state = FLASH_STATE_INIT;
+  reg [3:0] flash_state_next = FLASH_STATE_INIT;
   
   wire [23:0] byte_address;
   wire [SECTOR_BITS-PAGE_BITS-1:0] page_num;
   assign byte_address = address << PAGE_BITS;
   assign page_num = address[SECTOR_BITS-PAGE_BITS-1:0];
 
-  assign debug[0] = (flash_state == FLASH_STATE_WRITE_COMMAND);
+  assign debug[0] = (flash_state == FLASH_STATE_WRITE_BUSY);
   assign debug[1] = page_num[0];
   assign debug[2] = wr_data_get;
 
   reg [7:0] command_bits;       // Number of bits to transfer in the command stage.
-  reg [3:0] command_csel;       // Number of clocks to hold CSEL high after the command (or zero to leave CSEL active).
+  reg [7:0] command_csel;       // Number of clocks to hold CSEL high after the command (or zero to leave CSEL active).
   reg [63:0] command_buf;       // Command data to be shifted out of MOSI.
   reg command_start;            // Pulsed high to start a new command.
 
   reg [63:0] read_buf = 0;
   reg [63:0] write_buf = 0;
   reg [7:0] bitcount = 0;
-  reg [3:0] cseldelay = 0;
+  reg [7:0] cseldelay = 0;
   reg rd_data_ready = 0;
   wire transfer_busy = (bitcount || cseldelay);
   
@@ -165,6 +169,19 @@ module usb_spiflash_bridge #(
     command_buf <= 0;
 
     case (flash_state)
+      FLASH_STATE_INIT : begin
+        // Begin the power-on-reset sequence.
+        if (flash_rstdelay == 0) begin
+          flash_state_next <= FLASH_STATE_POWER_ON;
+          command_start <= 1;
+          command_bits  <= 8;
+          command_csel  <= 150; // May require up to 3us to release from powerdown.
+          command_buf   <= {56'b0, FLASH_CMD_RELEASE_POWER_DOWN};
+        end else begin
+          flash_state_next <= FLASH_STATE_INIT;
+        end
+      end
+
       FLASH_STATE_IDLE : begin
         if (rd_request) begin
           flash_state_next <= FLASH_STATE_READ_DATA;
@@ -187,9 +204,20 @@ module usb_spiflash_bridge #(
 
       FLASH_STATE_READ_DATA : begin
         if (!rd_request) begin
-          flash_state_next <= FLASH_STATE_IDLE;
+          flash_state_next <= FLASH_STATE_READ_EOF;
+          command_start <= 1;
+          command_bits  <= 0;
+          command_buf   <= 64'b0;
         end else begin
           flash_state_next <= FLASH_STATE_READ_DATA;
+        end
+      end
+
+      FLASH_STATE_READ_EOF : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_IDLE;
+        end else begin
+          flash_state_next <= FLASH_STATE_READ_EOF;
         end
       end
 
@@ -289,6 +317,14 @@ module usb_spiflash_bridge #(
         end
       end
 
+      FLASH_STATE_POWER_ON : begin
+        if (!transfer_busy) begin
+          flash_state_next <= FLASH_STATE_IDLE;
+        end else begin
+          flash_state_next <= FLASH_STATE_POWER_ON;
+        end
+      end
+
       default begin
         flash_state_next <= FLASH_STATE_IDLE;
       end
@@ -297,8 +333,10 @@ module usb_spiflash_bridge #(
 
   always @(posedge clk) begin
     if (reset) begin
-      flash_state <= FLASH_STATE_IDLE;
+      flash_rstdelay = 3'b1111;
+      flash_state <= FLASH_STATE_INIT;
     end else begin
+      if (flash_rstdelay) flash_rstdelay <= flash_rstdelay - 1;
       flash_state <= flash_state_next;
     end
   end
@@ -318,7 +356,7 @@ module usb_spiflash_bridge #(
       spi_csel <= 1'b0;
       spi_clk <= 1'b0;
       spi_mosi <= command_buf[command_bits-1];
-    end else if (flash_state == FLASH_STATE_IDLE) begin
+    end else if (flash_state == FLASH_STATE_INIT) begin
       spi_csel <= 1'b1;
       spi_clk <= 1'b0;
       spi_mosi <= 1'b0;
