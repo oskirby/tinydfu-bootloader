@@ -2,7 +2,11 @@ module usb_dfu_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
   parameter MAX_OUT_PACKET_SIZE = 32,
   parameter SPI_PAGE_SIZE = 256,
-  parameter SPI_FLASH_SIZE = 64, // In pages
+
+  // SPI flash partitioning Information.
+  parameter BOOTPART_SIZE = 'h40000,
+  parameter USERPART_SIZE = 'h40000,
+  parameter DATAPART_SIZE = 'h3C0000,
 ) (
   input clk,
   input reset,
@@ -19,7 +23,6 @@ module usb_dfu_ctrl_ep #(
   input [7:0] out_ep_data,
   output out_ep_stall,
   input out_ep_acked,
-
 
   ////////////////////
   // in endpoint interface
@@ -82,10 +85,8 @@ module usb_dfu_ctrl_ep #(
   localparam DFU_STATE_dfuUPLOAD_IDLE = 'h09;
   localparam DFU_STATE_dfuERROR = 'h0a;
 
-
   reg [5:0] ctrl_xfr_state = IDLE;
   reg [5:0] ctrl_xfr_state_next;
-
 
   reg setup_stage_end = 0;
   reg data_stage_end = 0;
@@ -168,10 +169,25 @@ module usb_dfu_ctrl_ep #(
   wire rom_data_put;
   assign rom_data_put = (ctrl_xfr_state == DATA_IN && more_data_to_send) && in_ep_data_free;
 
+  localparam BOOTPART_START = 0;
+  localparam USERPART_START = BOOTPART_START + BOOTPART_SIZE;
+  localparam DATAPART_START = USERPART_START + USERPART_SIZE;
+
+  wire [15:0] dfu_part_start[3:0];
+  wire [15:0] dfu_part_sizes[3:0];
+  assign dfu_part_start[0] = BOOTPART_START / SPI_PAGE_SIZE;
+  assign dfu_part_start[1] = USERPART_START / SPI_PAGE_SIZE;
+  assign dfu_part_start[2] = DATAPART_START / SPI_PAGE_SIZE;
+  assign dfu_part_sizes[0] = BOOTPART_SIZE  / SPI_PAGE_SIZE;
+  assign dfu_part_sizes[1] = USERPART_SIZE  / SPI_PAGE_SIZE;
+  assign dfU_part_sizes[2] = DATAPART_SIZE  / SPI_PAGE_SIZE;
+
   wire [7:0] dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
+  reg [15:0] dfu_block_start = USERPART_START / SPI_PAGE_SIZE;
+  reg [15:0] dfu_block_size = USERPART_SIZE / SPI_PAGE_SIZE;
+  reg [15:0] dfu_block_offset = 0;
   reg [15:0] dfu_block_addr = 0;
-  reg [15:0] dfu_block_start = 0;
   reg [15:0] dfu_block_end = 0;
 
   wire [7:0] dfu_spi_rd_data;
@@ -364,8 +380,8 @@ module usb_dfu_ctrl_ep #(
               if (wValue[7:0] == 0) begin
                 // Language descriptors
                 rom_mux     <= ROM_ENDPOINT;
-                rom_addr    <= 'h2d;
-                rom_length  <= ep_rom['h2d]; // bLength
+                rom_addr    <= 'h3F;
+                rom_length  <= ep_rom['h3F]; // bLength
               end else begin
                 rom_mux     <= ROM_STRING;
                 rom_addr    <= (wValue[7:0] - 1) << 5;
@@ -412,6 +428,8 @@ module usb_dfu_ctrl_ep #(
 
           // Select the desired alt mode, possibly adjusting the flash region.
           dfu_altsetting <= wValue;
+          dfu_block_start <= dfu_part_start[wValue];
+          dfu_block_size <= dfu_part_sizes[wValue];
         end
 
         'h101 : begin
@@ -422,9 +440,9 @@ module usb_dfu_ctrl_ep #(
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
 
-            dfu_block_start <= wValue;
-            dfu_block_end   <= wValue + SPI_FLASH_SIZE;
-            dfu_block_addr  <= 0;
+            dfu_block_offset <= dfu_block_start - wValue;
+            dfu_block_end   <= wValue + dfu_block_size;
+            dfu_block_addr  <= dfu_block_start;
             dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end else if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
             // We are not ready to receive another block
@@ -438,7 +456,7 @@ module usb_dfu_ctrl_ep #(
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
-            dfu_block_addr <= (wValue - dfu_block_start);
+            dfu_block_addr <= (wValue + dfu_block_offset);
             dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end
         end
@@ -451,9 +469,9 @@ module usb_dfu_ctrl_ep #(
             rom_length <= SPI_PAGE_SIZE;
 
             // Switch to the dfuUPLOAD-IDLE state.
-            dfu_block_start <= wValue;
-            dfu_block_end   <= wValue + SPI_FLASH_SIZE;
-            dfu_block_addr  <= 0;
+            dfu_block_offset <= dfu_block_start - wValue;
+            dfu_block_end   <= wValue + dfu_block_size;
+            dfu_block_addr  <= dfu_block_start;
             dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
           end else if (wValue >= dfu_block_end) begin
             rom_mux    <= ROM_ENDPOINT;
@@ -463,7 +481,7 @@ module usb_dfu_ctrl_ep #(
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
             rom_length <= SPI_PAGE_SIZE;
-            dfu_block_addr  <= (wValue - dfu_block_start);
+            dfu_block_addr <= (wValue + dfu_block_offset);
           end
         end
 
@@ -578,7 +596,7 @@ module usb_dfu_ctrl_ep #(
       // configuration descriptor
       ep_rom['h012] <= 9; // bLength
       ep_rom['h013] <= 2; // bDescriptorType
-      ep_rom['h014] <= (9+9+9); // wTotalLength[0] FIXME!!!
+      ep_rom['h014] <= (9+9+9+9+9); // wTotalLength[0] FIXME!!!
       ep_rom['h015] <= 0; // wTotalLength[1]
       ep_rom['h016] <= 1; // bNumInterfaces
       ep_rom['h017] <= 1; // bConfigurationValue
@@ -587,6 +605,7 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h01A] <= 50; // bMaxPower
       
       // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+      // bootloader partition
       ep_rom['h01B] <= 9; // bLength
       ep_rom['h01C] <= 4; // bDescriptorType
       ep_rom['h01D] <= 0; // bInterfaceNumber
@@ -596,23 +615,47 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h021] <= 1; // bInterfaceSubClass (Device Firmware Upgrade Code)
       ep_rom['h022] <= 2; // bInterfaceProtocol (DFU mode protocol)
       ep_rom['h023] <= 4; // iInterface
+      
+      // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+      // user image partition
+      ep_rom['h024] <= 9; // bLength
+      ep_rom['h025] <= 4; // bDescriptorType
+      ep_rom['h026] <= 0; // bInterfaceNumber
+      ep_rom['h027] <= 1; // bAlternateSetting
+      ep_rom['h028] <= 0; // bNumEndpoints
+      ep_rom['h029] <= 'hFE; // bInterfaceClass (Application Specific Class Code)
+      ep_rom['h02A] <= 1; // bInterfaceSubClass (Device Firmware Upgrade Code)
+      ep_rom['h02B] <= 2; // bInterfaceProtocol (DFU mode protocol)
+      ep_rom['h02C] <= 5; // iInterface
+
+      // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+      // data partition
+      ep_rom['h02D] <= 9; // bLength
+      ep_rom['h02E] <= 4; // bDescriptorType
+      ep_rom['h02F] <= 0; // bInterfaceNumber
+      ep_rom['h030] <= 2; // bAlternateSetting
+      ep_rom['h031] <= 0; // bNumEndpoints
+      ep_rom['h032] <= 'hFE; // bInterfaceClass (Application Specific Class Code)
+      ep_rom['h033] <= 1; // bInterfaceSubClass (Device Firmware Upgrade Code)
+      ep_rom['h034] <= 2; // bInterfaceProtocol (DFU mode protocol)
+      ep_rom['h035] <= 6; // iInterface
 
       // DFU Header Functional Descriptor, DFU Spec 4.1.3, Table 4.2
-      ep_rom['h024] <= 9;           // bFunctionLength
-      ep_rom['h025] <= 'h21;        // bDescriptorType
-      ep_rom['h026] <= 'h0b;				// bmAttributes
-      ep_rom['h027] <= 255;         // wDetachTimeout[0]
-      ep_rom['h028] <= 0;           // wDetachTimeout[1]
-      ep_rom['h029] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
-      ep_rom['h02A] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
-      ep_rom['h02B] <= 'h10;        // bcdDFUVersion[0]
-      ep_rom['h02C] <= 'h01;        // bcdDFUVersion[1]
+      ep_rom['h036] <= 9;           // bFunctionLength
+      ep_rom['h037] <= 'h21;        // bDescriptorType
+      ep_rom['h038] <= 'h0b;				// bmAttributes
+      ep_rom['h039] <= 255;         // wDetachTimeout[0]
+      ep_rom['h03A] <= 0;           // wDetachTimeout[1]
+      ep_rom['h03B] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
+      ep_rom['h03C] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
+      ep_rom['h03D] <= 'h10;        // bcdDFUVersion[0]
+      ep_rom['h03E] <= 'h01;        // bcdDFUVersion[1]
 
       // Language string descriptor is at string index zero.
-      ep_rom['h02D] <= 4;     // bLength
-      ep_rom['h02E] <= 3;     // bDescriptorType == STRING
-      ep_rom['h02F] <= 'h09;  // wLANGID[0] == US English
-      ep_rom['h030] <= 'h04;  // wLANGID[1]
+      ep_rom['h03F] <= 4;     // bLength
+      ep_rom['h040] <= 3;     // bDescriptorType == STRING
+      ep_rom['h041] <= 'h09;  // wLANGID[0] == US English
+      ep_rom['h042] <= 'h04;  // wLANGID[1]
 
       // String descriptors are allocated 32B for each descriptor.
       str_rom['h000] <= 16;  // bLength
@@ -649,13 +692,40 @@ module usb_dfu_ctrl_ep #(
       str_rom['h04A] <= "5";  str_rom['h04B] <= 0;
       str_rom['h04C] <= "6";  str_rom['h04D] <= 0;
 
-      str_rom['h060] <= 12;  // bLength
+      str_rom['h060] <= 22;  // bLength
       str_rom['h061] <= 3;   // bDescriptorType == STRING
-      str_rom['h062] <= "F"; str_rom['h063] <= 0;
-      str_rom['h064] <= "l"; str_rom['h065] <= 0;
-      str_rom['h066] <= "a"; str_rom['h067] <= 0;
-      str_rom['h068] <= "s"; str_rom['h069] <= 0;
-      str_rom['h06a] <= "h"; str_rom['h06b] <= 0;
+      str_rom['h062] <= "B"; str_rom['h063] <= 0;
+      str_rom['h064] <= "o"; str_rom['h065] <= 0;
+      str_rom['h066] <= "o"; str_rom['h067] <= 0;
+      str_rom['h068] <= "t"; str_rom['h069] <= 0;
+      str_rom['h06A] <= "l"; str_rom['h06B] <= 0;
+      str_rom['h06C] <= "o"; str_rom['h06D] <= 0;
+      str_rom['h06E] <= "a"; str_rom['h06F] <= 0;
+      str_rom['h070] <= "d"; str_rom['h071] <= 0;
+      str_rom['h072] <= "e"; str_rom['h073] <= 0;
+      str_rom['h074] <= "r"; str_rom['h075] <= 0;
+
+      str_rom['h080] <= 22;  // bLength
+      str_rom['h081] <= 3;   // bDescriptorType == STRING
+      str_rom['h082] <= "U"; str_rom['h083] <= 0;
+      str_rom['h084] <= "s"; str_rom['h085] <= 0;
+      str_rom['h086] <= "e"; str_rom['h087] <= 0;
+      str_rom['h088] <= "r"; str_rom['h089] <= 0;
+      str_rom['h08A] <= " "; str_rom['h08B] <= 0;
+      str_rom['h08C] <= "I"; str_rom['h08D] <= 0;
+      str_rom['h08E] <= "m"; str_rom['h08F] <= 0;
+      str_rom['h090] <= "a"; str_rom['h091] <= 0;
+      str_rom['h092] <= "g"; str_rom['h093] <= 0;
+      str_rom['h094] <= "e"; str_rom['h095] <= 0;
+
+      str_rom['h0A0] <= 10;  // bLength
+      str_rom['h0A1] <= 3;   // bDescriptorType == STRING
+      str_rom['h0A2] <= "D"; str_rom['h0A3] <= 0;
+      str_rom['h0A4] <= "a"; str_rom['h0A5] <= 0;
+      str_rom['h0A6] <= "t"; str_rom['h0A7] <= 0;
+      str_rom['h0A8] <= "a"; str_rom['h0A9] <= 0;
+
+
 
       // DFU State data
       dfu_mem['h000] <= DFU_STATUS_OK;      // bStatus
