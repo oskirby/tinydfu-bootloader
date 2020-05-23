@@ -24,18 +24,21 @@ SOURCES = \
 	$(RTL_USB_DIR)/usb_spiflash_bridge.v \
 	$(RTL_USB_DIR)/usb_dfu_core.v \
 	$(RTL_USB_DIR)/usb_dfu_i40.v \
- 	pll.v
+	pll.v
 
 SRC = $(PROJTOP).v $(SOURCES)
 
 PIN_DEF = pins.pcf
 
-DEVICE = up5k
-PACKAGE = sg48
+DEVICE = lp8k
+PACKAGE = cm81
 
-CLK_MHZ = 24
+CLK_MHZ = 48
 
 all: $(PROJTOP).rpt $(PROJTOP).bin $(PROJTOP).hex
+
+pll.v:
+	icepll -i 16 -o $(CLK_MHZ) -m -f $@
 
 synth: $(PROJTOP).json
 
@@ -61,7 +64,7 @@ prog: $(PROJTOP).bin
 	tinyprog -p $<
 
 clean:
-	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin
+	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin pll.v
 
 .SECONDARY:
 .PHONY: all synth prog clean gui

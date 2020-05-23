@@ -11,9 +11,7 @@ module tinydfu_tbx (
         inout  pin_usb_n,
         output pin_pu,
 
-        output pin_red_led,
-        output pin_grn_led,
-        output pin_blu_led,
+        output pin_led,
 
         output pin_16_cs,
         output pin_15_sck,
@@ -41,27 +39,11 @@ module tinydfu_tbx (
     wire [7:0] led_debug;
 
     // LED
-    reg [22:0] ledCounter;
+    reg [22:0] led_counter;
     always @(posedge clk_48mhz) begin
-        ledCounter <= ledCounter + 1;
+        led_counter <= led_counter + 1;
     end
-
-    SB_RGBA_DRV RGBA_DRIVER (
-        .CURREN(1'b1),
-        .RGBLEDEN(1'b1),
-        .RGB0PWM(ledCounter[ 22 ]),
-        .RGB1PWM(led_debug[0]),
-        .RGB2PWM(led_debug[1]),
-        .RGB0(pin_red_led),
-        .RGB1(pin_grn_led),
-        .RGB2(pin_blu_led)
-    );
-
-    defparam RGBA_DRIVER.CURRENT_MODE = "0b1";
-    defparam RGBA_DRIVER.RGB0_CURRENT = "0b000001";  // Blue
-    defparam RGBA_DRIVER.RGB1_CURRENT = "0b000001";  // Red
-    defparam RGBA_DRIVER.RGB2_CURRENT = "0b000001";  // Green
-  
+    assign pin_led = led_counter[22];
 
 
     // Generate reset signal
