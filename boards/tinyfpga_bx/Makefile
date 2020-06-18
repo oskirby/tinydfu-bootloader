@@ -6,7 +6,7 @@ BASENAME = tinydfu
 TARGETNAME = $(BASENAME)_tbx
 PROJTOP = $(TARGETNAME)
 
-RTL_USB_DIR = usb
+RTL_USB_DIR = ../../usb
 
 SOURCES = \
 	$(RTL_USB_DIR)/edge_detect.v \

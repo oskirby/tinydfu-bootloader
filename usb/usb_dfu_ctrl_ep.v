@@ -180,7 +180,7 @@ module usb_dfu_ctrl_ep #(
   assign dfu_part_start[2] = DATAPART_START / SPI_PAGE_SIZE;
   assign dfu_part_sizes[0] = BOOTPART_SIZE  / SPI_PAGE_SIZE;
   assign dfu_part_sizes[1] = USERPART_SIZE  / SPI_PAGE_SIZE;
-  assign dfU_part_sizes[2] = DATAPART_SIZE  / SPI_PAGE_SIZE;
+  assign dfu_part_sizes[2] = DATAPART_SIZE  / SPI_PAGE_SIZE;
 
   wire [7:0] dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;

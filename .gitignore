@@ -3,4 +3,4 @@ pll.v
 *.asc
 *.rpt
 *.bin
-
+*.hex
