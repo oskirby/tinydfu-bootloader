@@ -127,33 +127,12 @@ module usb_spiflash_bridge #(
   reg [8:0]   wr_cache_read_addr = 0;
   reg [8:0]   wr_cache_write_addr = 0;
 
-`ifdef NOT_DEFINED_THING
-  wire [15:0] wr_cache_read_data;
-  SB_RAM40_4K wr_cache_mem(
-    .MASK(16'h0000),
-
-    // Read data port (cache -> SPI flash)
-    .RDATA(wr_cache_read_data),
-    .RADDR(wr_cache_read_addr),
-    .RCLK(clk),
-    .RCLKE(1'b1),
-    .RE(1'b1),
-
-    // Write data port (USB endpoint -> cache),
-    .WDATA({8'b0, wr_data}),
-    .WADDR(wr_cache_waddr_latch),
-    .WCLK(clk),
-    .WCLKE(wr_request),
-    .WE(wr_cache_we_latch)
-  );
-`else
   reg [7:0]   wr_cache_mem[(1 << PAGE_BITS)-1:0];
-  reg [7:0]   wr_cache_read_data = 0;
+  reg [7:0]   wr_cache_read_data;
   always @(posedge clk) begin
     wr_cache_read_data <= wr_cache_mem[wr_cache_read_addr];
     if (wr_cache_we_latch) wr_cache_mem[wr_cache_waddr_latch] <= wr_cache_wdata_latch;
   end
-`endif
 
   reg [8:0] wr_cache_waddr_latch = 0;
   reg [7:0] wr_cache_wdata_latch = 0;
