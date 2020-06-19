@@ -30,7 +30,7 @@ SRC = $(PROJTOP).v $(SOURCES)
 
 PIN_DEF = logicbone-rev0.lpf
 
-DEVICE = --um5g-85k
+DEVICE = --um5g-45k
 PACKAGE = CABGA381
 
 all: $(PROJTOP).bit $(PROJTOP).hex $(PROJTOP).svf
@@ -43,10 +43,11 @@ $(PROJTOP).json: $(SRC)
 %_out.config: %.json
 	nextpnr-ecp5 --json $< --textcfg $@ $(DEVICE) --package $(PACKAGE) --lpf $(PIN_DEF)
 
-%.bit: %_out.config
-	ecppack --svf $(PROJTOP).svf $< $@
+%.svf: %_out.config
+	ecppack --svf $@ $<
 
-$(PROJTOP).svf : $(PROJTOP).bit
+%.bit: %_out.config
+	ecppack --compress --spimode qspi $< $@
 
 %.hex: %.bit
 	hexdump $^ > $@

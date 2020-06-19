@@ -124,30 +124,19 @@ module usb_spiflash_bridge #(
 
   // Data cache, holds a page of data to be written.
   reg         wr_cache_empty = 0;
-  reg [8:0]   wr_cache_read_addr = 0;
-  reg [8:0]   wr_cache_write_addr = 0;
+  reg [PAGE_BITS:0] wr_cache_read_addr = 0;
+  reg [PAGE_BITS:0] wr_cache_write_addr = 0;
 
   reg [7:0]   wr_cache_mem[(1 << PAGE_BITS)-1:0];
   reg [7:0]   wr_cache_read_data;
   always @(posedge clk) begin
     wr_cache_read_data <= wr_cache_mem[wr_cache_read_addr];
-    if (wr_cache_we_latch) wr_cache_mem[wr_cache_waddr_latch] <= wr_cache_wdata_latch;
-  end
-
-  reg [8:0] wr_cache_waddr_latch = 0;
-  reg [7:0] wr_cache_wdata_latch = 0;
-  reg wr_cache_we_latch = 0;
-
-  always @(posedge clk) begin
-    wr_cache_we_latch <= 0;
     wr_cache_empty <= (wr_cache_read_addr == wr_cache_write_addr);
 
-    if (flash_state == FLASH_STATE_WRITE_BUSY) wr_cache_write_addr <= 0;
+    if (flash_state == FLASH_STATE_IDLE) wr_cache_write_addr <= 0;
     else if (wr_data_get) begin
-      wr_cache_wdata_latch <= wr_data;
-      wr_cache_waddr_latch <= wr_cache_write_addr;
+      wr_cache_mem[wr_cache_write_addr] <= wr_data;
       wr_cache_write_addr <= wr_cache_write_addr + 1;
-      wr_cache_we_latch <= 1'b1;
     end
   end
 

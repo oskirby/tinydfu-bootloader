@@ -30,7 +30,7 @@ module logicbone_ecp5 (
 
     // The SPI serial clock requires a special IP block to access.
     wire flash_sclk;
-    USRMCLK usr_sclk(.USRMCLKI(flash_sclk), .USRMCLKTS(1'b1));
+    USRMCLK usr_sclk(.USRMCLKI(flash_sclk), .USRMCLKTS(1'b0));
 
     ////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////
