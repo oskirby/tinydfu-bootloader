@@ -44,6 +44,10 @@ module usb_dfu_ctrl_ep #(
   output spi_mosi,
   input spi_miso,
 
+  ////////////////////
+  // DFU State and debug
+  ////////////////////
+  output [7:0] dfu_state,
   output [7:0] debug,
 );
 
@@ -182,7 +186,7 @@ module usb_dfu_ctrl_ep #(
   assign dfu_part_sizes[1] = USERPART_SIZE  / SPI_PAGE_SIZE;
   assign dfu_part_sizes[2] = DATAPART_SIZE  / SPI_PAGE_SIZE;
 
-  wire [7:0] dfu_state = dfu_mem['h004];
+  assign dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
   reg [15:0] dfu_block_start = USERPART_START / SPI_PAGE_SIZE;
   reg [15:0] dfu_block_size = USERPART_SIZE / SPI_PAGE_SIZE;

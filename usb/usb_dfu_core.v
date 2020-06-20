@@ -25,6 +25,8 @@
     .spi_mosi(spi_mosi),
     .spi_miso(spi_miso),
 
+    // DFU state and debug
+    .dfu_state(dfu_state),
     .debug( debug )
   );
 
@@ -132,6 +134,8 @@ module usb_dfu_core(
   output spi_mosi,
   input spi_miso,
 
+  // DFU state and debug
+  output [7:0] dfu_state,
   output [11:0] debug
 );
 
@@ -184,7 +188,6 @@ module usb_dfu_core(
     .out_ep_stall(ctrl_out_ep_stall),
     .out_ep_acked(ctrl_out_ep_acked),
 
-
     // in endpoint interface
     .in_ep_req(ctrl_in_ep_req),
     .in_ep_grant(ctrl_in_ep_grant),
@@ -200,7 +203,9 @@ module usb_dfu_core(
     .spi_clk(spi_clk),
     .spi_mosi(spi_mosi),
     .spi_miso(spi_miso),
-    
+
+    // DFU state and debug
+    .dfu_state( dfu_state ),
     .debug(debug[3:0]),
   );
 

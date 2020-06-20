@@ -14,6 +14,16 @@
     // pins
     .pin_usb_p( pin_usb_p ),
     .pin_usb_n( pin_usb_n ),
+
+    // SPI pins
+    .spi_csel( spi_csel ),
+    .spi_clk( spi_clk ),
+    .spi_mosi( spi_mosi ),
+    .spi_miso( spi_miso ),
+
+    // DFU state and debug
+    .dfu_state( dfu_state ),
+    .debug( debug )
   );
 
 */
@@ -32,6 +42,8 @@ module usb_dfu (
   output spi_mosi,
   input spi_miso,
 
+  // DFU state and debug
+  output [7:0] dfu_state,
   output [11:0] debug
 );
 
@@ -60,6 +72,8 @@ module usb_dfu (
         .spi_mosi(spi_mosi),
         .spi_miso(spi_miso),
 
+         // DFU state and debug
+        .dfu_state(dfu_state),
         .debug( debug )
     );
 
