@@ -654,7 +654,7 @@ module usb_dfu_ctrl_ep #(
       // DFU Header Functional Descriptor, DFU Spec 4.1.3, Table 4.2
       ep_rom['h036] <= 9;           // bFunctionLength
       ep_rom['h037] <= 'h21;        // bDescriptorType
-      ep_rom['h038] <= 'h0b;				// bmAttributes
+      ep_rom['h038] <= 'h0f;				// bmAttributes
       ep_rom['h039] <= 255;         // wDetachTimeout[0]
       ep_rom['h03A] <= 0;           // wDetachTimeout[1]
       ep_rom['h03B] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]

@@ -2,6 +2,9 @@
 LOCATE COMP "refclk" SITE "M19";
 IOBUF PORT "refclk" IO_TYPE=LVCMOS18;
 
+LOCATE COMP "resetn" SITE "C17";
+IOBUF PORT "resetn" IO_TYPE=LVCMOS33;
+
 #======================================
 # Bank 1: Upstream USB Port and LEDs
 #======================================

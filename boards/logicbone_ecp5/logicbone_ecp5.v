@@ -6,6 +6,8 @@
 
 module logicbone_ecp5 (
     input  refclk,
+    output resetn,
+    input  pwr_button,
 
     inout  usb_ufp_dp,
     inout  usb_ufp_dm,
@@ -62,12 +64,16 @@ always @* begin
     endcase
 end
 
-// Generate reset signal
-reg [5:0] reset_cnt = 0;
-wire reset = ~reset_cnt[5];
-always @(posedge clk_48mhz)
-    if ( clk_locked )
-        reset_cnt <= reset_cnt + reset;
+//////////////////////////
+// Reset and Multiboot
+//////////////////////////
+reg user_bootmode = 1'b0;
+reg [15:0] reset_delay = 16'hffff;
+always @(posedge clk_48mhz) begin
+    if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
+    if (pwr_button == 1'b0) user_bootmode <= 1'b1;
+end
+BB pin_resetn( .I( 1'b0 ), .T( user_bootmode || reset_delay ), .O( ), .B( resetn ) );
 
 wire usb_p_tx;
 wire usb_n_tx;
@@ -78,7 +84,7 @@ wire usb_tx_en;
 // usb DFU - this instanciates the entire USB device.
 usb_dfu dfu (
     .clk_48mhz  (clk_48mhz),
-    .reset      (reset),
+    .reset      (~user_bootmode),
 
     // pins
     .pin_usb_p( usb_ufp_dp ),
@@ -96,6 +102,6 @@ usb_dfu dfu (
 );
 
 // USB Host Detect Pull Up
-assign usb_ufp_pull = 1'b1;
+BB pin_usb_pull( .I( 1'b1 ), .T( ~user_bootmode ), .O( ), .B( usb_ufp_pull ) );
 
 endmodule
