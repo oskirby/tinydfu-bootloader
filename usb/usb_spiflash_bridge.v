@@ -124,6 +124,7 @@ module usb_spiflash_bridge #(
 
   // Data cache, holds a page of data to be written.
   reg         wr_cache_empty = 0;
+  reg         wr_data_valid = 0;
   reg [PAGE_BITS:0] wr_cache_read_addr = 0;
   reg [PAGE_BITS:0] wr_cache_write_addr = 0;
 
@@ -132,9 +133,10 @@ module usb_spiflash_bridge #(
   always @(posedge clk) begin
     wr_cache_read_data <= wr_cache_mem[wr_cache_read_addr];
     wr_cache_empty <= (wr_cache_read_addr == wr_cache_write_addr);
+    wr_data_valid <= wr_data_get;
 
     if (flash_state == FLASH_STATE_IDLE) wr_cache_write_addr <= 0;
-    else if (wr_data_get) begin
+    else if (wr_data_valid) begin
       wr_cache_mem[wr_cache_write_addr] <= wr_data;
       wr_cache_write_addr <= wr_cache_write_addr + 1;
     end
