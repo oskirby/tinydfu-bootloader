@@ -455,13 +455,20 @@ module usb_dfu_ctrl_ep #(
             rom_length <= 'h00;
             dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
             dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else begin
-            // Download is complete.
+          end else if (wLength) begin
+            // Download the next block
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            rom_length <= wLength;
             dfu_block_addr <= (wValue + dfu_block_offset);
             dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
+          end else begin
+            // Download the final (zero length) block
+            rom_mux    <= ROM_ENDPOINT;
+            rom_addr   <= 'h00;
+            rom_length <= 'h00;
+            dfu_mem['h000] <= DFU_STATUS_OK;
+            dfu_mem['h004] <= DFU_STATE_dfuMANIFEST_SYNC;
           end
         end
 
