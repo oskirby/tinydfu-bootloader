@@ -1,12 +1,6 @@
 module usb_dfu_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
   parameter MAX_OUT_PACKET_SIZE = 32,
-  parameter SPI_PAGE_SIZE = 256,
-
-  // SPI flash partitioning Information.
-  parameter BOOTPART_SIZE = 'h100000,
-  parameter USERPART_SIZE = 'h200000,
-  parameter DATAPART_SIZE = 'hD00000,
 ) (
   input clk,
   input reset,
@@ -50,6 +44,9 @@ module usb_dfu_ctrl_ep #(
   output [7:0] dfu_state,
   output [7:0] debug,
 );
+
+  // Get flash partition information
+  `include "boardinfo.vh"
 
   localparam IDLE = 0;
   localparam SETUP_IN = 1;
@@ -177,19 +174,19 @@ module usb_dfu_ctrl_ep #(
   localparam USERPART_START = BOOTPART_START + BOOTPART_SIZE;
   localparam DATAPART_START = USERPART_START + USERPART_SIZE;
 
-  wire [15:0] dfu_part_start[3:0];
-  wire [15:0] dfu_part_sizes[3:0];
-  assign dfu_part_start[0] = BOOTPART_START / SPI_PAGE_SIZE;
-  assign dfu_part_start[1] = USERPART_START / SPI_PAGE_SIZE;
-  assign dfu_part_start[2] = DATAPART_START / SPI_PAGE_SIZE;
-  assign dfu_part_sizes[0] = BOOTPART_SIZE  / SPI_PAGE_SIZE;
-  assign dfu_part_sizes[1] = USERPART_SIZE  / SPI_PAGE_SIZE;
-  assign dfu_part_sizes[2] = DATAPART_SIZE  / SPI_PAGE_SIZE;
+  wire [15:0] dfu_part_start[2:0];
+  wire [15:0] dfu_part_sizes[2:0];
+  assign dfu_part_start[0] = (BOOTPART_START / SPI_PAGE_SIZE);
+  assign dfu_part_start[1] = (USERPART_START / SPI_PAGE_SIZE);
+  assign dfu_part_start[2] = (DATAPART_START / SPI_PAGE_SIZE);
+  assign dfu_part_sizes[0] = (BOOTPART_SIZE  / SPI_PAGE_SIZE);
+  assign dfu_part_sizes[1] = (USERPART_SIZE  / SPI_PAGE_SIZE);
+  assign dfu_part_sizes[2] = (DATAPART_SIZE  / SPI_PAGE_SIZE);
 
   assign dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
-  reg [15:0] dfu_block_start = USERPART_START / SPI_PAGE_SIZE;
-  reg [15:0] dfu_block_size = USERPART_SIZE / SPI_PAGE_SIZE;
+  reg [15:0] dfu_block_start = (USERPART_START / SPI_PAGE_SIZE);
+  reg [15:0] dfu_block_size = (USERPART_SIZE / SPI_PAGE_SIZE);
   reg [15:0] dfu_block_offset = 0;
   reg [15:0] dfu_block_addr = 0;
   reg [15:0] dfu_block_end = 0;
@@ -442,7 +439,7 @@ module usb_dfu_ctrl_ep #(
             // Starting a new download.
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            rom_length <= wLength;
 
             dfu_block_offset <= dfu_block_start - wValue;
             dfu_block_end   <= wValue + dfu_block_size;
@@ -477,7 +474,7 @@ module usb_dfu_ctrl_ep #(
           if (dfu_mem['h004] != DFU_STATE_dfuUPLOAD_IDLE) begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            rom_length <= wLength;
 
             // Switch to the dfuUPLOAD-IDLE state.
             dfu_block_offset <= dfu_block_start - wValue;
@@ -491,7 +488,7 @@ module usb_dfu_ctrl_ep #(
           end else begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
-            rom_length <= SPI_PAGE_SIZE;
+            rom_length <= wLength;
             dfu_block_addr <= (wValue + dfu_block_offset);
           end
         end
@@ -568,7 +565,7 @@ module usb_dfu_ctrl_ep #(
 
   reg [7:0] ep_rom[255:0];
   reg [7:0] str_rom[255:0];
-  reg [7:0] dfu_mem[7:0];
+  reg [7:0] dfu_mem[5:0];
 
   // Mux the data being read
   always @* begin
@@ -592,10 +589,10 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h006] <= 'h00; // bDeviceProtocol
       ep_rom['h007] <= MAX_OUT_PACKET_SIZE; // bMaxPacketSize0
 
-      ep_rom['h008] <= 'h50; // idVendor[0] http://wiki.openmoko.org/wiki/USB_Product_IDs
-      ep_rom['h009] <= 'h1d; // idVendor[1]
-      ep_rom['h00A] <= 'h30; // idProduct[0]
-      ep_rom['h00B] <= 'h61; // idProduct[1]
+      ep_rom['h008] <= BOARD_VID >> 0; // idVendor[0]
+      ep_rom['h009] <= BOARD_VID >> 8; // idVendor[1]
+      ep_rom['h00A] <= BOARD_PID >> 0; // idProduct[0]
+      ep_rom['h00B] <= BOARD_PID >> 8; // idProduct[1]
 
       ep_rom['h00C] <= 0; // bcdDevice[0]
       ep_rom['h00D] <= 0; // bcdDevice[1]

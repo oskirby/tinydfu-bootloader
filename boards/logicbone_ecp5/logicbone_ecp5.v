@@ -1,9 +1,6 @@
 /*
-    TinyDFU Bootloader
-
-    Wrapping usb/usb_dfu_ice40.v.
+    TinyDFU Bootloader for the Logicbone ECP5.
 */
-
 module logicbone_ecp5 (
     input  refclk,
     output resetn,
@@ -16,7 +13,7 @@ module logicbone_ecp5 (
     output [3:0] led,
 
     output flash_csel,
-    //output flash_sclk,
+    //output flash_sclk, // Requires a special USRMCLK block.
     output flash_mosi,
     input flash_miso,
 
@@ -57,12 +54,7 @@ end
 
 // Select the LED pattern by DFU state.
 wire [7:0] dfu_state;
-always @* begin
-    case (dfu_state)
-        'h02 : led <= ~led_idle;    // DFU_STATE_dfuIDLE
-        default : led <= ~led_cylon;
-    endcase
-end
+assign led = (dfu_state == 'h02) ? ~led_idle : led_cylon;
 
 //////////////////////////
 // Reset and Multiboot
