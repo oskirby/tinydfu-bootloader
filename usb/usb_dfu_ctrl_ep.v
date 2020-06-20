@@ -4,9 +4,9 @@ module usb_dfu_ctrl_ep #(
   parameter SPI_PAGE_SIZE = 256,
 
   // SPI flash partitioning Information.
-  parameter BOOTPART_SIZE = 'h40000,
-  parameter USERPART_SIZE = 'h40000,
-  parameter DATAPART_SIZE = 'h3C0000,
+  parameter BOOTPART_SIZE = 'h100000,
+  parameter USERPART_SIZE = 'h200000,
+  parameter DATAPART_SIZE = 'hD00000,
 ) (
   input clk,
   input reset,

@@ -33,6 +33,7 @@ PIN_DEF = logicbone-rev0.lpf
 DEVICE = --um5g-45k
 #DEVICE = --um5g-85k
 PACKAGE = CABGA381
+BOOTADDR = 0x100000 # User image starts at 1MB
 
 all: $(PROJTOP).bit $(PROJTOP).hex $(PROJTOP).svf
 
@@ -48,7 +49,7 @@ $(PROJTOP).json: $(SRC)
 	ecppack --svf $@ $<
 
 %.bit: %_out.config
-	ecppack --compress --spimode qspi $< $@
+	ecppack --compress --bootaddr $(BOOTADDR) --spimode qspi $< $@
 
 %.hex: %.bit
 	hexdump $^ > $@
