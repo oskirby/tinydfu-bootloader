@@ -508,6 +508,7 @@ module usb_dfu_ctrl_ep #(
             rom_mux    <= ROM_ENDPOINT;
             rom_addr   <= 0;
             rom_length <= 0;
+            dfu_mem['h004] <= DFU_STATE_dfuIDLE;
           end else begin
             rom_mux    <= ROM_FIRMWARE;
             rom_addr   <= 0;
