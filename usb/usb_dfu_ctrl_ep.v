@@ -92,6 +92,22 @@ module usb_dfu_ctrl_ep #(
   localparam ALT_MODE_SECURITY = 'h03;
   localparam ALT_MODE_MAX = (ALT_MODE_SECURITY + SPI_SECURITY_REGISTERS);
 
+  localparam STR_INDEX_MANUFACTURER = 1;
+  localparam STR_INDEX_PRODUCT = 2;
+  localparam STR_INDEX_SERIAL = 3;
+  localparam STR_INDEX_PARTITIONS = 4;
+
+  localparam USERPART_NAME = "User Image";
+  localparam DATAPART_NAME = "User Data";
+  localparam BOOTPART_NAME = "Bootloader";
+
+  localparam TEST_SERIAL = "123456";
+
+  function [8:0] str_addr;
+    input [7:0] index;
+    str_addr = (index - 1) * 9'h020;
+  endfunction
+
   reg [5:0] ctrl_xfr_state = IDLE;
   reg [5:0] ctrl_xfr_state_next;
 
@@ -404,8 +420,8 @@ module usb_dfu_ctrl_ep #(
                 rom_length  <= ep_rom['h12]; // bLength
               end else begin
                 rom_mux     <= ROM_STRING;
-                rom_addr    <= (wValue[7:0] - 1) << 5;
-                rom_length  <= str_rom[(wValue[7:0] - 1) << 5];
+                rom_addr    <= str_addr(wValue[7:0]);
+                rom_length  <= str_rom[str_addr(wValue[7:0])];
               end
             end
 
@@ -622,9 +638,9 @@ module usb_dfu_ctrl_ep #(
 
       ep_rom['h00C] <= 0; // bcdDevice[0]
       ep_rom['h00D] <= 0; // bcdDevice[1]
-      ep_rom['h00E] <= 1; // iManufacturer
-      ep_rom['h00F] <= 2; // iProduct
-      ep_rom['h010] <= 3; // iSerialNumber
+      ep_rom['h00E] <= STR_INDEX_MANUFACTURER;  // iManufacturer
+      ep_rom['h00F] <= STR_INDEX_PRODUCT;       // iProduct
+      ep_rom['h010] <= STR_INDEX_SERIAL;        // iSerialNumber
       ep_rom['h011] <= 1; // bNumConfigurations
 
       // Language string descriptor is at string index zero.
@@ -655,79 +671,6 @@ module usb_dfu_ctrl_ep #(
       cfg_rom[(ALT_MODE_MAX * 9) + 'h10] <= 'h10;        // bcdDFUVersion[0]
       cfg_rom[(ALT_MODE_MAX * 9) + 'h11] <= 'h01;        // bcdDFUVersion[1]
 
-      // String descriptors are allocated 32B for each descriptor.
-      str_rom['h000] <= 16;  // bLength
-      str_rom['h001] <= 3;   // bDescriptorType == STRING
-      str_rom['h002] <= "L";  str_rom['h003] <= 0;
-      str_rom['h004] <= "a";  str_rom['h005] <= 0;
-      str_rom['h006] <= "t";  str_rom['h007] <= 0;
-      str_rom['h008] <= "t";  str_rom['h009] <= 0;
-      str_rom['h00A] <= "i";  str_rom['h00B] <= 0;
-      str_rom['h00C] <= "c";  str_rom['h00D] <= 0;
-      str_rom['h00E] <= "e";  str_rom['h00F] <= 0;
-
-      str_rom['h020] <= 26;  // bLength
-      str_rom['h021] <= 3;   // bDescriptorType == STRING
-      str_rom['h022] <= "T";  str_rom['h023] <= 0;
-      str_rom['h024] <= "i";  str_rom['h025] <= 0;
-      str_rom['h026] <= "n";  str_rom['h027] <= 0;
-      str_rom['h028] <= "y";  str_rom['h029] <= 0;
-      str_rom['h02A] <= "D";  str_rom['h02B] <= 0;
-      str_rom['h02C] <= "F";  str_rom['h02D] <= 0;
-      str_rom['h02E] <= "U";  str_rom['h02F] <= 0;
-      str_rom['h030] <= " ";  str_rom['h031] <= 0;
-      str_rom['h032] <= "B";  str_rom['h033] <= 0;
-      str_rom['h034] <= "o";  str_rom['h035] <= 0;
-      str_rom['h036] <= "o";  str_rom['h037] <= 0;
-      str_rom['h038] <= "t";  str_rom['h039] <= 0;
-
-      str_rom['h040] <= 14;  // bLength
-      str_rom['h041] <= 3;   // bDescriptorType == STRING
-      str_rom['h042] <= "1";  str_rom['h043] <= 0;
-      str_rom['h044] <= "2";  str_rom['h045] <= 0;
-      str_rom['h046] <= "3";  str_rom['h047] <= 0;
-      str_rom['h048] <= "4";  str_rom['h049] <= 0;
-      str_rom['h04A] <= "5";  str_rom['h04B] <= 0;
-      str_rom['h04C] <= "6";  str_rom['h04D] <= 0;
-
-      str_rom['h060] <= 22;  // bLength
-      str_rom['h061] <= 3;   // bDescriptorType == STRING
-      str_rom['h062] <= "U"; str_rom['h063] <= 0;
-      str_rom['h064] <= "s"; str_rom['h065] <= 0;
-      str_rom['h066] <= "e"; str_rom['h067] <= 0;
-      str_rom['h068] <= "r"; str_rom['h069] <= 0;
-      str_rom['h06A] <= " "; str_rom['h06B] <= 0;
-      str_rom['h06C] <= "I"; str_rom['h06D] <= 0;
-      str_rom['h06E] <= "m"; str_rom['h06F] <= 0;
-      str_rom['h070] <= "a"; str_rom['h071] <= 0;
-      str_rom['h072] <= "g"; str_rom['h073] <= 0;
-      str_rom['h074] <= "e"; str_rom['h075] <= 0;
-
-      str_rom['h080] <= 20;  // bLength
-      str_rom['h081] <= 3;   // bDescriptorType == STRING
-      str_rom['h082] <= "U"; str_rom['h083] <= 0;
-      str_rom['h084] <= "s"; str_rom['h085] <= 0;
-      str_rom['h086] <= "e"; str_rom['h087] <= 0;
-      str_rom['h088] <= "r"; str_rom['h089] <= 0;
-      str_rom['h08A] <= " "; str_rom['h08B] <= 0;
-      str_rom['h08C] <= "D"; str_rom['h08D] <= 0;
-      str_rom['h08E] <= "a"; str_rom['h08F] <= 0;
-      str_rom['h090] <= "t"; str_rom['h091] <= 0;
-      str_rom['h092] <= "a"; str_rom['h093] <= 0;
-
-      str_rom['h0A0] <= 22;  // bLength
-      str_rom['h0A1] <= 3;   // bDescriptorType == STRING
-      str_rom['h0A2] <= "B"; str_rom['h0A3] <= 0;
-      str_rom['h0A4] <= "o"; str_rom['h0A5] <= 0;
-      str_rom['h0A6] <= "o"; str_rom['h0A7] <= 0;
-      str_rom['h0A8] <= "t"; str_rom['h0A9] <= 0;
-      str_rom['h0AA] <= "l"; str_rom['h0AB] <= 0;
-      str_rom['h0AC] <= "o"; str_rom['h0AD] <= 0;
-      str_rom['h0AE] <= "a"; str_rom['h0AF] <= 0;
-      str_rom['h0B0] <= "d"; str_rom['h0B1] <= 0;
-      str_rom['h0B2] <= "e"; str_rom['h0B3] <= 0;
-      str_rom['h0B4] <= "r"; str_rom['h0B5] <= 0;
-
       // DFU State data
       dfu_mem['h000] <= DFU_STATUS_OK;      // bStatus
       dfu_mem['h001] <= 1;                  // bwPollTimeout[0]
@@ -737,7 +680,9 @@ module usb_dfu_ctrl_ep #(
       dfu_mem['h005] <= 0;                  // iString
   end
 
-// Generate alternate settings and strings for the 
+///////////////////////////////////////////////////////////
+// Generate Configuration Descriptors for the Partitions
+///////////////////////////////////////////////////////////
 genvar alt_num;
 generate
   for (alt_num = 0; alt_num < ALT_MODE_MAX; alt_num = alt_num + 1) begin
@@ -750,11 +695,14 @@ generate
       cfg_rom[alt_num*9 + 'h0E] <= 'hFE;  // bInterfaceClass (Application Specific Class Code)
       cfg_rom[alt_num*9 + 'h0F] <= 1;     // bInterfaceSubClass (Device Firmware Upgrade Code)
       cfg_rom[alt_num*9 + 'h10] <= 2;     // bInterfaceProtocol (DFU mode protocol)
-      cfg_rom[alt_num*9 + 'h11] <= (4+alt_num); // iInterface
+      cfg_rom[alt_num*9 + 'h11] <= (STR_INDEX_PARTITIONS + alt_num); // iInterface
     end
   end
 endgenerate
 
+///////////////////////////////////////////////////////////
+// Generate String ROMS for the Security Registers
+///////////////////////////////////////////////////////////
 genvar sec_page;
 generate
   for (sec_page = 0; sec_page < SPI_SECURITY_REGISTERS; sec_page = sec_page + 1) begin
@@ -779,5 +727,30 @@ generate
     end
   end
 endgenerate
+
+///////////////////////////////////////////////////////////
+// Generate String ROMS for Board Description
+///////////////////////////////////////////////////////////
+
+`define INIT_STRING_ROM(_idx_, _str_) \
+  genvar i;                                                 \
+  generate                                                  \
+    initial begin                                           \
+      str_rom[str_addr(_idx_) + 0] <= 2 + $size(_str_) / 4; \
+      str_rom[str_addr(_idx_) + 1] <= 3;                    \
+    end                                                     \
+    for (i = 0; i < $size(_str_); i = i + 8) begin          \
+      initial str_rom[str_addr(_idx_) + 2 + i/4] <=         \
+          _str_[$size(_str_)-i-1 : $size(_str_)-i-8];       \
+      initial str_rom[str_addr(_idx_) + 3 + i/4] <= 8'h00;  \
+    end                                                     \
+  endgenerate
+
+`INIT_STRING_ROM(STR_INDEX_MANUFACTURER, BOARD_MFR_NAME)
+`INIT_STRING_ROM(STR_INDEX_PRODUCT, BOARD_PRODUCT_NAME)
+`INIT_STRING_ROM(STR_INDEX_SERIAL, TEST_SERIAL)
+`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_USERPART, USERPART_NAME)
+`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_DATAPART, DATAPART_NAME)
+`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_BOOTPART, BOOTPART_NAME)
 
 endmodule
