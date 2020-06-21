@@ -11,6 +11,10 @@ localparam BOOTPART_START = 0;
 localparam USERPART_START = BOOTPART_START + BOOTPART_SIZE;
 localparam DATAPART_START = USERPART_START + USERPART_SIZE;
 
+/* How many security registers are there? */
+localparam SPI_SECURITY_REGISTERS = 3;
+localparam SPI_SECURITY_REG_SHIFT = 12;
+
 /* USB VID/PID Definitions */
 localparam BOARD_VID = 'h1d50;  /* OpenMoko Inc. */
 localparam BOARD_PID = 'h6130;  /* TinyFPGA Bootloader */

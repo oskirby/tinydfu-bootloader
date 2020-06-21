@@ -17,12 +17,12 @@ module usb_spiflash_bridge #(
   // control interface
   ////////////////////
   input [15:0] address,         // Flash page address
+  input security,               // Access a security register (instead of flash).
 
   ////////////////////
   // data read interfce
   ////////////////////
   input rd_request,             // High to request reading from the flash device.
-  input rd_security,            // High to request reading from a security register.
   input rd_data_free,           // High whenever the upstream can accept more data.
   output reg rd_data_put,       // High whenever data is flowing from the flash device.
   output reg [7:0] rd_data = 0, // Output data bus when reading.
@@ -167,31 +167,24 @@ module usb_spiflash_bridge #(
         if (rd_request) begin
           flash_state_next <= FLASH_STATE_READ_DATA;
           command_start <= 1;
-          command_bits <= 48;
           command_csel <= 0;
-          command_buf  <= {16'b0, FLASH_CMD_FAST_READ, byte_address, 16'b0};
+          command_bits <= 48;
+          command_buf  <= {16'b0, (security) ? FLASH_CMD_READ_SECURITY : FLASH_CMD_FAST_READ, byte_address, 16'b0};
         
         end else if (wr_request) begin
           // We need to erase when starting a new sector.
-          flash_state_next <= (page_num == 0) ? FLASH_STATE_ERASE_ENABLE : FLASH_STATE_WRITE_ENABLE;
+          flash_state_next <= ((page_num == 0) || security) ? FLASH_STATE_ERASE_ENABLE : FLASH_STATE_WRITE_ENABLE;
           command_start <= 1;
           command_bits  <= 8;
           command_buf   <= {56'b0, FLASH_CMD_WRITE_ENABLE};
         
-        end else if (rd_security) begin
-          flash_state_next <= FLASH_STATE_READ_DATA;
-          command_start <= 1;
-          command_bits <= 32;
-          command_csel <= 0;
-          command_buf  <= {32'b0, FLASH_CMD_READ_SECURITY, byte_address};
-
         end else begin
           flash_state_next <= FLASH_STATE_IDLE;
         end
       end
 
       FLASH_STATE_READ_DATA : begin
-        if (!rd_request && !rd_security) begin
+        if (!rd_request) begin
           flash_state_next <= FLASH_STATE_READ_EOF;
           command_start <= 1;
           command_bits  <= 0;
@@ -215,7 +208,7 @@ module usb_spiflash_bridge #(
           command_start <= 1;
           command_bits  <= 32;
           command_csel  <= 4;
-          command_buf   <= {32'b0, FLASH_CMD_SECTOR_ERASE, byte_address};
+          command_buf   <= {32'b0, (security ? FLASH_CMD_ERASE_SECURITY : FLASH_CMD_SECTOR_ERASE), byte_address};
         end else begin
           flash_state_next <= FLASH_STATE_ERASE_ENABLE;
         end
@@ -254,7 +247,7 @@ module usb_spiflash_bridge #(
           command_start <= 1;
           command_bits  <= 32;
           command_csel  <= 0;
-          command_buf   <= {32'b0, FLASH_CMD_PAGE_PROGRAM, byte_address};
+          command_buf   <= {32'b0, (security ? FLASH_CMD_PROGRAM_SECURITY : FLASH_CMD_PAGE_PROGRAM), byte_address};
         end else begin
           flash_state_next <= FLASH_STATE_WRITE_ENABLE;
         end

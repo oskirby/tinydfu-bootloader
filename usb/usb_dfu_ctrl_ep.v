@@ -48,9 +48,6 @@ module usb_dfu_ctrl_ep #(
   // Get flash partition information
   `include "boardinfo.vh"
 
-  localparam SPI_SECURITY_REGISTERS = 3;
-  localparam SPI_SECURITY_REG_SHIFT = 8;
-
   localparam IDLE = 0;
   localparam SETUP_IN = 1;
   localparam SETUP_DONE = 2;
@@ -93,7 +90,7 @@ module usb_dfu_ctrl_ep #(
   localparam ALT_MODE_DATAPART = 'h01;
   localparam ALT_MODE_BOOTPART = 'h02;
   localparam ALT_MODE_SECURITY = 'h03;
-  localparam NUM_ALT_MODES = (3 + SPI_SECURITY_REGISTERS);
+  localparam ALT_MODE_MAX = (ALT_MODE_SECURITY + SPI_SECURITY_REGISTERS);
 
   reg [5:0] ctrl_xfr_state = IDLE;
   reg [5:0] ctrl_xfr_state_next;
@@ -182,8 +179,8 @@ module usb_dfu_ctrl_ep #(
 
   // Select the flash partition based on altsetting.
   wire       dfu_part_security = (dfu_altsetting >= ALT_MODE_SECURITY);
-  reg [15:0] dfu_part_start[NUM_ALT_MODES-1:0];
-  reg [15:0] dfu_part_size[NUM_ALT_MODES-1:0];
+  reg [15:0] dfu_part_start[ALT_MODE_MAX-1:0];
+  reg [15:0] dfu_part_size[ALT_MODE_MAX-1:0];
 
   initial begin
     dfu_part_start[ALT_MODE_USERPART] <= USERPART_START / SPI_PAGE_SIZE;
@@ -198,7 +195,7 @@ module usb_dfu_ctrl_ep #(
   
   genvar alt_num;
   generate
-    for (alt_num = ALT_MODE_SECURITY; alt_num < NUM_ALT_MODES; alt_num = alt_num + 1) begin
+    for (alt_num = ALT_MODE_SECURITY; alt_num < ALT_MODE_MAX; alt_num = alt_num + 1) begin
       initial begin
         dfu_part_start[alt_num] <= (alt_num - ALT_MODE_SECURITY + 1) << (SPI_SECURITY_REG_SHIFT - $clog2(SPI_PAGE_SIZE));
         dfu_part_size[alt_num]  <= 1;
@@ -242,9 +239,9 @@ module usb_dfu_ctrl_ep #(
     .spi_miso(spi_miso),
 
     .address(dfu_block_addr),
+    .security(dfu_part_security),
 
-    .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE && !dfu_part_security),
-    .rd_security(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE && dfu_part_security),
+    .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
     .rd_data_free(more_data_to_send && in_ep_data_free),
     .rd_data_put(dfu_spi_rd_data_put),
     .rd_data(dfu_spi_rd_data),
@@ -472,26 +469,26 @@ module usb_dfu_ctrl_ep #(
             rom_length <= 'h00;
             dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
             dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else if (wValue >= dfu_block_end) begin
-            rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 'h00;
-            rom_length <= 'h00;
-            dfu_mem['h000] <= DFU_STATUS_ERR_ADDRESS;
-            dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else if (wLength) begin
-            // Download the next block
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= wLength;
-            dfu_block_addr <= (wValue + dfu_block_offset);
-            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
-          end else begin
+          end else if (wLength == 0) begin
             // Download the final (zero length) block
             rom_mux    <= ROM_ENDPOINT;
             rom_addr   <= 'h00;
             rom_length <= 'h00;
             dfu_mem['h000] <= DFU_STATUS_OK;
             dfu_mem['h004] <= DFU_STATE_dfuMANIFEST_SYNC;
+          end else if (wValue >= dfu_block_end) begin
+            rom_mux    <= ROM_ENDPOINT;
+            rom_addr   <= 'h00;
+            rom_length <= 'h00;
+            dfu_mem['h000] <= DFU_STATUS_ERR_ADDRESS;
+            dfu_mem['h004] <= DFU_STATE_dfuERROR;
+          end else begin
+            // Download the next block
+            rom_mux    <= ROM_FIRMWARE;
+            rom_addr   <= 0;
+            rom_length <= wLength;
+            dfu_block_addr <= (wValue + dfu_block_offset);
+            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
           end
         end
 
@@ -638,7 +635,7 @@ module usb_dfu_ctrl_ep #(
       // configuration descriptor
       cfg_rom['h00] <= 9; // bLength
       cfg_rom['h01] <= 2; // bDescriptorType
-      cfg_rom['h02] <= (9+9) + (NUM_ALT_MODES * 9); // wTotalLength[0]
+      cfg_rom['h02] <= (9+9) + (ALT_MODE_MAX * 9); // wTotalLength[0]
       cfg_rom['h03] <= 0; // wTotalLength[1]
       cfg_rom['h04] <= 1; // bNumInterfaces
       cfg_rom['h05] <= 1; // bConfigurationValue
@@ -647,15 +644,15 @@ module usb_dfu_ctrl_ep #(
       cfg_rom['h08] <= 50; // bMaxPower
       
       // DFU Header Functional Descriptor, DFU Spec 4.1.3, Table 4.2
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h09] <= 9;           // bFunctionLength
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0A] <= 'h21;        // bDescriptorType
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0B] <= 'h0f;        // bmAttributes
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0C] <= 255;         // wDetachTimeout[0]
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0D] <= 0;           // wDetachTimeout[1]
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0E] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h0F] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h10] <= 'h10;        // bcdDFUVersion[0]
-      cfg_rom[(NUM_ALT_MODES * 9) + 'h11] <= 'h01;        // bcdDFUVersion[1]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h09] <= 9;           // bFunctionLength
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0A] <= 'h21;        // bDescriptorType
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0B] <= 'h0f;        // bmAttributes
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0C] <= 255;         // wDetachTimeout[0]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0D] <= 0;           // wDetachTimeout[1]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0E] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0F] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h10] <= 'h10;        // bcdDFUVersion[0]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h11] <= 'h01;        // bcdDFUVersion[1]
 
       // String descriptors are allocated 32B for each descriptor.
       str_rom['h000] <= 16;  // bLength
@@ -742,7 +739,7 @@ module usb_dfu_ctrl_ep #(
 // Generate alternate settings and strings for the 
 genvar alt_num;
 generate
-  for (alt_num = 0; alt_num < NUM_ALT_MODES; alt_num = alt_num + 1) begin
+  for (alt_num = 0; alt_num < ALT_MODE_MAX; alt_num = alt_num + 1) begin
     initial begin
       cfg_rom[alt_num*9 + 'h09] <= 9;     // bLength
       cfg_rom[alt_num*9 + 'h0A] <= 4;     // bDescriptorType

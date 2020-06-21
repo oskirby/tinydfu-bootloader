@@ -54,7 +54,7 @@ end
 
 // Select the LED pattern by DFU state.
 wire [7:0] dfu_state;
-assign led = (dfu_state == 'h02) ? ~led_idle : led_cylon;
+assign led = (dfu_state == 'h02) ? ~led_idle : ~led_cylon;
 
 //////////////////////////
 // Reset and Multiboot
