@@ -10,7 +10,6 @@ RTL_USB_DIR = ../../usb
 
 SOURCES = \
 	$(RTL_USB_DIR)/edge_detect.v \
-	$(RTL_USB_DIR)/serial.v \
 	$(RTL_USB_DIR)/usb_fs_in_arb.v \
 	$(RTL_USB_DIR)/usb_fs_in_pe.v \
 	$(RTL_USB_DIR)/usb_fs_out_arb.v \

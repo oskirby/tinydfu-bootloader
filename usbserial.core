@@ -6,7 +6,6 @@ filesets:
   rtl:
     files:
       - usb/edge_detect.v
-      - usb/serial.v
       - usb/usb_fs_in_arb.v
       - usb/usb_fs_in_pe.v
       - usb/usb_fs_out_arb.v

@@ -120,12 +120,12 @@ Development has been done on Ubuntu.
 Clone the repo
 
 ```
-git clone https://github.com/oskirby/tinydfu-.git
+git clone https://github.com/oskirby/tinydfu-bootloader.git
 ```
 
-and enter the directory
+and enter the build directory for your board
 
-`cd tinydfu-bootloader`
+`cd tinydfu-bootloader/boards/tinyfpga_bx`
 
 And make it!
 
@@ -137,13 +137,21 @@ If it completes successfully, press the "program" button on the TinyFPGA BX and 
 
 `make prog`
 
-If all went well, you will then see a new port which you can connect to with a serial terminal emulator (on Ubuntu the port is /dev/ttyACM0 and a good terminal program is **gtkterminal** since it doesn't seem to get upset if you forget to disconnect before reprogramming).
+If all went well, the device should enumerate by usb as a DFU capable device in DFU mode. You should be able to list its partitions with dfu-util
 
-For this demo, characters typed are rather unspectacularly just echo'ed back.
+```
+user@example:~$ dfu-util -l
+dfu-util 0.9
 
-`make gui`
+Copyright 2005-2009 Weston Schmidt, Harald Welte and OpenMoko Inc.
+Copyright 2010-2016 Tormod Volden and Stefan Schmidt
+This program is Free Software and has ABSOLUTELY NO WARRANTY
+Please report bugs to http://sourceforge.net/p/dfu-util/tickets/
 
-Let's you perform the place and route manually and generate pretty pictures like the ones above.
+Found DFU: [1d50:6130] ver=0000, devnum=13, cfg=1, intf=0, path="1-4", alt=2, name="Bootloader", serial="123456"
+Found DFU: [1d50:6130] ver=0000, devnum=13, cfg=1, intf=0, path="1-4", alt=1, name="User Data", serial="123456"
+Found DFU: [1d50:6130] ver=0000, devnum=13, cfg=1, intf=0, path="1-4", alt=0, name="User Image", serial="123456"
+```
 
 ## Dependencies
 
@@ -159,102 +167,17 @@ Make sure you get NextPNR.
 
 https://tinyfpga.com/bx/guide.html
 
-## Debug
+# License
+Copyright 2020 Owen Kirby <oskirby@gmail.com>
 
-There is some debug instrumentation left in the code.  This will just disappear if you don't use it.  For the Device Host bug, there were 16 lines connected to the hardware to present as much state as possible from the USB stack for debugging.  Here's one resulting screenshot where the interface is working to near capacity.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-![](usb_serial_deep_debug.png)
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
-- D0 - trigger (to send a 40-ish byte block if the last one was done)
-- D1 Pipeline Data[ 0 ] (toggles when presented with a sequence of odd-even data)
-- D2 Pipeline Valid - there is data available
-- D3 Pipeline Ready - the data can be accepted
-- D4 USB SERIAL IN State Machine[0] - controlling the pipeline from FPGA to Host (usb_spiflash_bridge.v)
-- D5 USB SERIAL IN State Machine[1]
-- D6 `in_ep_data_done` (asserted when a partial outgoing buffer should be sent)
-- D7  `in_ep_data_free` (asserted while the usb serial sysyem can accept data)
-- D8 - EP State Machine[0] - `current_ep_state` (usb_fs_in_pe.v)
-- D9 - EP State Machine[1]
-- D10 - IN TX State Machine[0] - `in_xfr_state` (usb_fs_in_pe.v)
-- D11 - IN TX State Machine[1]
-- D12 - Bytes available to Tx - this indicates that there are bytes to send the USB transmitter
-- D13 - Byte to Tx - this is the strobe of the next byte into the USB transmitter
-- D14 - Receiver Message Start - the USB receiver has received a message start (an IN token or Ack here)
-- D15 - Receiver Message End - the USB receiver has received a message start (an IN token or Ack here)
-
-Overall, you can see the data source pipelining data (D1) into the buffer whenever the USB port is ready (D3).  When a buffer is full, the interface waits (EP State Machine D9,D8 = 1,0) until it gets an IN Token (D14,D15).  When this happens, the waiting buffer is sent as fast as the USB lines can send send them.  The interface waits for an ACK (D14,D15) and when all is well, signals up the stack that it's ready to fill another buffer.  And the cycle restarts.
-
-## Issues
-
-**Pipeline Interface**
-
-Run slowly, the pipeline is pretty simple.  Data is available (`valid`), receiver (signaling `ready`) receives it.  Wait.  Repeat.  You can certainly use it in a simple way by de-asserting `ready` every cycle forcing the interface into a two step (`valid` `ready`, `valid` `~ready`).  The logic to do this is pretty simple.
-
-Where the pipeline shines is when data is streaming - one in, one out every clock cycle, (as happens in multibyte transfers), but for a simple seeming interface, and one that appears in near all FPGA code, a pipeline like this can be *fiendishly* complex to implement, especially for modules both receiving and sending data.  Implementers *must* have a firm grasp on their `=`'s vs `<=`'s, know their `always @(*)`'s from their `always @(posedge clk)`'s, and really understand combinatorial vs registered signals.
-
-Here's a taste.  Consider a pipeline module, m with both upstream and downstream communicating partners.  The main area of complexity happens when data is streaming (`valid` and `ready` are asserted by all).  Every clock, data is flowing from the upstream module into m, and from m into the downstream module below it. Suddenly the downstream module gets busy or is itself held up for some reason and it lowers `ready`.  When this happens module m has to latch the data that it is currently sending (since data is transferred only when *both* parties agree), hold `valid` high and wait.  Meanwhile the upstream module's data *was considered transfered*.  So the poor module m in the middle has to both latch its data word and store the new overflow one and just hang out.  Then when the downstream module finally signals that it's ready (raising the `ready` line), module m first needs to give it the original data, then the stored overflow data, and only then can it start accepting data again (raising its `ready` to the upstream module).  Getting all this in your head and implemented correctly can take days (or weeks)
-
-Mr ZipCPU talks about pipelining a lot here - https://zipcpu.com/blog/2017/08/14/strategies-for-pipelining.html . He uses "STB" and "Busy" as his signals, and his development of the subject is pretty nice.  I haven't used his code.  There are a few places where I have skeptical squint-eye, and so to not end up balling and throwing things every time I implemented something pipeline-y, I ended up writing my own pipeline code from scratch.
-
-So, feel free to use this interface, or put another one on it!  Maybe someone will create a whole suite of pipelined modules to do stuff...
-
-**Command Line**
-
-There are rumors that some people don't like command-line tools.  If you (or a friend) think you might be one of these people, please feel free to connect this project to your other fancy environment (Apio, PlatformIO) and submit the appropriate files so others may experience these delights.
-
-**Accuracy / Mistakes / Etc.**
-
-Please feel free to suggest fixes / improvements / changes.
-
-## Fixed Issues
-
-**Design Passing Timing**
-
-Originally some long constants were creating very long carry chains.  The code could never be made to pass at 48MHz.  This was dangerous since some parts under some conditions might not work.  Now it does pass!
-
-```
-Info: Max frequency for clock 'clk_48mhz_$glb_clk': 51.60 MHz (PASS at 48.00 MHz)
-```
-
-For reference, there were a few places like the following:
-
-usb/usb_fs_out_pe.v:185
-```
-              if (ep_get_addr[ep_num][5:0] >= (ep_put_addr[ep_num][5:0] - 2)) begin
-```
-
-usb/usb_fs_out_pe.v:212
-```
-          ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0] + 1;
-```
-
-In these cases, the constant is interpreted as 32b and the whole operation is conducted at that width.  32b long carry chains can not be done at 48MHz in the iCE40. The fix was for these needed to become explicitly shorter.
-
-usb/usb_fs_out_pe.v:185
-```
-              if (ep_get_addr[ep_num][5:0] >= (ep_put_addr[ep_num][5:0] - 6'H2)) begin
-```
-
-usb/usb_fs_out_pe.v:212
-```
-          ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0] + 6H'1;
-```
-
-So that the full 32b addition and subtraction was not conducted.  This is possibly an issue with yosys (and may even be already fixed) since the Xilinx Vivado tools just silently ignore all the extra bits.  This kind of problem occurs in a few other places.  See the relevant [commit](https://github.com/davidthings/tinyfpga_bx_usbserial/commit/d9e157e09c166894e25777a0037a3c3d1592f135) for more.
-
-
-**Device-Host Bug**
-
-If the device sent data when the host was not ready, bad things happened.  If the device sent more than 32 bytes in a single burst, bad things happened. Only good things happen now from single bytes up to streams almost at link capacity.
-
-**32 Character Bug**
-
-Turns out that was all me.  Fixed now.
-
-**Back Pressure Bugs**
-
-The OUT EP interface (characters from the host) would stutter a little sometimes when the pipeline signaled `~ready`.  This is fixed now.
-
-**Send Timeout**
-
-The IN EP (characters to the host) employed a very aggressive policy for buffer termination.  Whenever the pipeline went dry - `~valid` it would send the bytes already received, initiating a whole packet turnaround.  This is not ideal when a pipeline may stop for a cycle or two periodically.  So now when there's a pause, the IN EP waits for up to 8 cycles before dispatching the packet.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
