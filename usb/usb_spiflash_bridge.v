@@ -22,6 +22,7 @@ module usb_spiflash_bridge #(
   // data read interfce
   ////////////////////
   input rd_request,             // High to request reading from the flash device.
+  input rd_security,            // High to request reading from a security register.
   input rd_data_free,           // High whenever the upstream can accept more data.
   output reg rd_data_put,       // High whenever data is flowing from the flash device.
   output reg [7:0] rd_data = 0, // Output data bus when reading.
@@ -176,6 +177,13 @@ module usb_spiflash_bridge #(
           command_start <= 1;
           command_bits  <= 8;
           command_buf   <= {56'b0, FLASH_CMD_WRITE_ENABLE};
+        
+        end else if (rd_security) begin
+          flash_state_next <= FLASH_STATE_READ_DATA;
+          command_start <= 1;
+          command_bits <= 32;
+          command_csel <= 0;
+          command_buf  <= {32'b0, FLASH_CMD_READ_SECURITY, byte_address};
 
         end else begin
           flash_state_next <= FLASH_STATE_IDLE;
@@ -183,7 +191,7 @@ module usb_spiflash_bridge #(
       end
 
       FLASH_STATE_READ_DATA : begin
-        if (!rd_request) begin
+        if (!rd_request && !rd_security) begin
           flash_state_next <= FLASH_STATE_READ_EOF;
           command_start <= 1;
           command_bits  <= 0;

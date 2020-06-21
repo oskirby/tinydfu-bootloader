@@ -3,8 +3,8 @@ localparam SPI_FLASH_SIZE = (1 * 1024 *1024);
 localparam SPI_PAGE_SIZE  = 256;
 
 /* Flash partition layout */
-localparam BOOTPART_SIZE = (256 * 1024);
-localparam USERPART_SIZE = (256 * 1024);
+localparam BOOTPART_SIZE = (160 * 1024);
+localparam USERPART_SIZE = (160 * 1024);
 localparam DATAPART_SIZE = (SPI_FLASH_SIZE - BOOTPART_SIZE - USERPART_SIZE);
 
 localparam BOOTPART_START = 0;
