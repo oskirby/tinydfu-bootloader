@@ -63,7 +63,7 @@ assign led = (dfu_state == 'h02) ? ~led_idle : ~led_cylon;
 //////////////////////////
 // Reset and Multiboot
 //////////////////////////
-reg user_bootmode = 1'b1;
+reg user_bootmode = 1'b0;
 reg [15:0] reset_delay = 16'hffff;
 always @(posedge clk_48mhz) begin
     if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
@@ -160,22 +160,21 @@ i2c_master #(
   .i2c_sda_drive_n       ( i2c_sda_drive_n )
 );
 
-
   
-  localparam I2C_SEQ_DELAY               = 14'b00000000000001;
-  localparam I2C_SEQ_CHECK_USB           = 14'b00000000000010;
-  localparam I2C_SEQ_CHECK_USB_FIN       = 14'b00000000000100;
-  localparam I2C_SEQ_PROG_DOWNSTREAM     = 14'b00000000001000;
-  localparam I2C_SEQ_PROG_DOWNSTREAM_FIN = 14'b00000000010000;
-  localparam I2C_SEQ_CMD_3               = 14'b00000000100000;
-  localparam I2C_SEQ_CMD_3_FIN           = 14'b00000001000000;
-  localparam I2C_SEQ_CMD_4               = 14'b00000010000000;
-  localparam I2C_SEQ_CMD_4_FIN           = 14'b00000100000000;
-  localparam I2C_SEQ_CMD_5               = 14'b00001000000000;
-  localparam I2C_SEQ_CMD_5_FIN           = 14'b00010000000000;
-  localparam I2C_SEQ_CMD_6               = 14'b00100000000000;
-  localparam I2C_SEQ_CMD_6_FIN           = 14'b01000000000000;
-  localparam I2C_SEQ_DONE                = 14'b10000000000000;
+localparam I2C_SEQ_DELAY               = 14'b00000000000001;
+localparam I2C_SEQ_CHECK_USB           = 14'b00000000000010;
+localparam I2C_SEQ_CHECK_USB_FIN       = 14'b00000000000100;
+localparam I2C_SEQ_PROG_DOWNSTREAM     = 14'b00000000001000;
+localparam I2C_SEQ_PROG_DOWNSTREAM_FIN = 14'b00000000010000;
+localparam I2C_SEQ_CMD_3               = 14'b00000000100000;
+localparam I2C_SEQ_CMD_3_FIN           = 14'b00000001000000;
+localparam I2C_SEQ_CMD_4               = 14'b00000010000000;
+localparam I2C_SEQ_CMD_4_FIN           = 14'b00000100000000;
+localparam I2C_SEQ_CMD_5               = 14'b00001000000000;
+localparam I2C_SEQ_CMD_5_FIN           = 14'b00010000000000;
+localparam I2C_SEQ_CMD_6               = 14'b00100000000000;
+localparam I2C_SEQ_CMD_6_FIN           = 14'b01000000000000;
+localparam I2C_SEQ_DONE                = 14'b10000000000000;
 reg [13:0]                 i2c_seq_state;
 reg [13:0]                 next_i2c_seq_state;
 
@@ -201,8 +200,8 @@ always @(*) begin
   end
   
   I2C_SEQ_CHECK_USB: begin
-    i2c_address                   = 7'h2D; // 0101101
-    i2c_write_transfer_length     = 1;     // 1011010
+    i2c_address                   = 7'h2D;
+    i2c_write_transfer_length     = 1;
     i2c_read_transfer_length      = 2;
     
     i2c_write_data                = 32'h1C;
@@ -253,11 +252,6 @@ always @(*) begin
   end
   
   I2C_SEQ_DONE: begin
-    if (i2c_seq_delay) next_i2c_seq_delay = i2c_seq_delay - 1;
-    else begin
-      next_i2c_seq_delay = 100;
-      next_i2c_seq_state = I2C_SEQ_DELAY;
-    end
   end
       
   endcase
