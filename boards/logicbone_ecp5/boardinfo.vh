@@ -17,7 +17,7 @@ localparam SPI_SECURITY_REG_SHIFT = 12;
 
 /* USB VID/PID Definitions */
 localparam BOARD_VID = 'h1d50;  /* OpenMoko Inc. */
-localparam BOARD_PID = 'h6130;  /* TinyFPGA Bootloader */
+localparam BOARD_PID = 'h615d;  /* Logicbone DFU Bootloader */
 
 /* String Descriptors */
 localparam BOARD_MFR_NAME = "oskirby";
