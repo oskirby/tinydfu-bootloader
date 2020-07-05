@@ -1,0 +1,178 @@
+***************************************************************************************
+*                      PROJECT ARCHIVE SUMMARY REPORT
+*
+*                      (archive_project_summary.txt)
+*
+*  PLEASE READ THIS REPORT TO GET THE DETAILED INFORMATION ABOUT THE PROJECT DATA THAT
+*  WAS ARCHIVED FOR THE CURRENT PROJECT
+*
+* The report is divided into following five sections:-
+*
+* Section (1) - PROJECT INFORMATION
+*  This section provides the details of the current project that was archived
+*
+* Section (2) - INCLUDED/EXCLUDED RUNS
+*  This section summarizes the list of design runs for which the results were included
+*  or excluded from the archive
+*
+* Section (3) - ARCHIVED SOURCES
+*  This section summarizes the list of files that were added to the archive
+*
+* Section (3.1) - INCLUDE FILES
+*  This section summarizes the list of 'include' files that were added to the archive
+*
+* Section (3.1.1) - INCLUDE_DIRS SETTINGS
+*  This section summarizes the 'verilog include directory' path settings, if any
+*
+* Section (3.2) - REMOTE SOURCES
+*  This section summarizes the list of referenced 'remote' files that were 'imported'
+*  into the archived project
+*
+* Section (3.3) - SOURCES SUMMARY
+*  This section summarizes the list of all the files present in the archive
+*
+* Section (3.4) - REMOTE IP DEFINITIONS
+*  This section summarizes the list of all the remote IP's present in the archive
+*
+* Section (4) - JOURNAL/LOG FILES
+*  This section summarizes the list of journal/log files that were added to the archive
+*
+***************************************************************************************
+
+Section (1) - PROJECT INFORMATION
+---------------------------------
+Name      = usbdfu
+Directory = C:/Users/Rik/Downloads/tmp/usbdfu
+
+WARNING: Please verify the compiled library directory path for the following property in the
+         current project. The path may point to an invalid location after opening this project.
+         This could happen if the project was unarchived in a location where this path is not
+         accessible. To resolve this issue, please set this property with the desired path
+         before launching simulation:-
+
+Property = compxlib.xsim_compiled_library_dir
+Path     = 
+
+Section (2) - Excluded Runs
+---------------------------
+The run results were excluded for the following runs in the archived project:-
+
+<synth_1>
+<clk_wiz_0_synth_1>
+<impl_1>
+<clk_wiz_0_impl_1>
+
+Section (3) - ARCHIVED SOURCES
+------------------------------
+The following sub-sections describes the list of sources that were archived for the current project:-
+
+Section (3.1) - INCLUDE FILES
+-----------------------------
+List of referenced 'RTL Include' files that were 'imported' into the archived project:-
+
+None
+
+Section (3.1.1) - INCLUDE_DIRS SETTINGS
+---------------------------------------
+List of the "INCLUDE_DIRS" fileset property settings that may or may not be applicable in the archived
+project, since most the 'RTL Include' files referenced in the original project were 'imported' into the
+archived project.
+
+<sources_1> fileset RTL include directory paths (INCLUDE_DIRS):-
+None
+
+<sim_1> fileset RTL include directory paths (INCLUDE_DIRS):-
+None
+
+Section (3.2) - REMOTE SOURCES
+------------------------------
+List of referenced 'remote' design files that were 'imported' into the archived project:-
+
+<clk_wiz_0>
+None
+
+<constrs_1>
+None
+
+<sim_1>
+None
+
+<sources_1>
+None
+
+<utils_1>
+None
+
+Section (3.3) - SOURCES SUMMARY
+-------------------------------
+List of all the source files present in the archived project:-
+
+<sources_1>
+./usbdfu.srcs/sources_1/imports/usb/edge_detect.v
+./usbdfu.srcs/sources_1/imports/usb/usb_dfu_core.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_in_arb.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_in_pe.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_out_arb.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_out_pe.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_pe.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_rx.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_tx.v
+./usbdfu.srcs/sources_1/imports/usb/usb_fs_tx_mux.v
+./usbdfu.srcs/sources_1/imports/usb/usb_spiflash_bridge.v
+./usbdfu.srcs/sources_1/imports/tinyfpga_bx/boardinfo.vh
+./usbdfu.srcs/sources_1/imports/usb/usb_dfu_ctrl_ep.v
+./usbdfu.srcs/sources_1/new/usb_dfu_a7.v
+
+<constrs_1>
+./usbdfu.srcs/constrs_1/imports/tmp/Arty-A7-35-Master.xdc
+
+<sim_1>
+None
+
+<utils_1>
+None
+
+<clk_wiz_0>
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xci
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/doc/clk_wiz_v6_0_changelog.txt
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_board.xdc
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.veo
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_7s_mmcm.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_7s_pll.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_us_mmcm.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_us_pll.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_us_plus_pll.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/mmcm_pll_drp_func_us_plus_mmcm.vh
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_clk_wiz.v
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.v
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.dcp
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_stub.v
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_stub.vhdl
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_sim_netlist.v
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_sim_netlist.vhdl
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xdc
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_ooc.xdc
+./usbdfu.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xml
+
+Section (3.4) - REMOTE IP DEFINITIONS
+-------------------------------------
+List of all the remote IP's present in the archived project:-
+
+<sources_1>
+None
+
+<clk_wiz_0>
+None
+
+None
+
+Section (4) - JOURNAL/LOG FILES
+-------------------------------
+List of Journal/Log files that were added to the archived project:-
+
+Source File = C:/Users/Rik/AppData/Roaming/Xilinx/Vivado/vivado.jou
+Archived Location = ./usbdfu/vivado.jou
+
+Source File = C:/Users/Rik/AppData/Roaming/Xilinx/Vivado/vivado.log
+Archived Location = ./usbdfu/vivado.log
+
