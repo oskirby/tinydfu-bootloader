@@ -158,14 +158,14 @@ module i2c_master #(
       assign bit_next_working_write_data  = { working_write_data[INTERFACE_SIZE-1:8], working_write_data[6:0], 1'd0 };
       assign byte_next_working_write_data = { 8'd0, working_write_data[INTERFACE_SIZE-1:8] };
       
-      assign bit_next_working_read_data  = { working_read_data[INTERFACE_SIZE-1:8], latched_i2c_sda_in, working_read_data[7:1] };
+      assign bit_next_working_read_data  = { working_read_data[INTERFACE_SIZE-1:8], working_read_data[6:0], latched_i2c_sda_in };
       assign byte_next_working_read_data = { working_read_data[INTERFACE_SIZE-9:0], 8'd0 };
     end
     else begin
       assign bit_next_working_write_data  = { working_write_data[6:0], 1'd0 };
       assign byte_next_working_write_data = { 8'd0 };
       
-      assign bit_next_working_read_data = { latched_i2c_sda_in, working_read_data[7:1] };
+      assign bit_next_working_read_data = { working_read_data[6:0], latched_i2c_sda_in };
       assign byte_next_working_read_data = 8'd0;
     end
   endgenerate
