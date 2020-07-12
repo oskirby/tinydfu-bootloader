@@ -11,6 +11,7 @@ RTL_I2C_DIR = ../../i2c
 
 SOURCES = \
 	$(RTL_USB_DIR)/edge_detect.v \
+	$(RTL_USB_DIR)/strobe.v \
 	$(RTL_USB_DIR)/usb_fs_in_arb.v \
 	$(RTL_USB_DIR)/usb_fs_in_pe.v \
 	$(RTL_USB_DIR)/usb_fs_out_arb.v \

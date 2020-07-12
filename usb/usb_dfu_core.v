@@ -118,7 +118,8 @@ serial.v        - width adapter (x widths to y widths)
 
 module usb_dfu_core (
   input  clk_48mhz,
-  input reset,
+  input  clk,
+  input  reset,
 
   // USB lines.  Split into input vs. output and oe control signal to maintain
   // highest level of compatibility with synthesis tools.
@@ -174,7 +175,7 @@ module usb_dfu_core (
   reg host_presence_timeout = 0;
 
   usb_dfu_ctrl_ep dfu_ep_inst (
-    .clk(clk_48mhz),
+    .clk(clk),
     .reset(reset),
     .dev_addr(dev_addr),
 
@@ -217,7 +218,8 @@ module usb_dfu_core (
     .NUM_OUT_EPS(5'd1),
     .NUM_IN_EPS(5'd1)
   ) usb_fs_pe_inst (
-    .clk(clk_48mhz),
+    .clk_48mhz(clk_48mhz),
+    .clk(clk),
     .reset(reset),
 
     .usb_p_tx(usb_p_tx),

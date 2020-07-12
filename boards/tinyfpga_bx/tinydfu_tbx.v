@@ -22,12 +22,15 @@ module tinydfu_tbx (
     );
 
     wire clk_48mhz;
+    reg  clk_24mhz = 0;
+    reg  clk = 0;
 
     wire clk_locked;
 
     // Use an icepll generated pll
     pll pll48( .clock_in(pin_clk), .clock_out(clk_48mhz), .locked( clk_locked ) );
-
+    always @(posedge clk_48mhz) clk_24mhz = ~clk_24mhz;
+    always @(posedge clk_24mhz) clk = ~clk;
 
     ////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////
@@ -40,16 +43,15 @@ module tinydfu_tbx (
 
     // LED
     reg [22:0] led_counter;
-    always @(posedge clk_48mhz) begin
+    always @(posedge clk) begin
         led_counter <= led_counter + 1;
     end
-    assign pin_led = led_counter[22];
-
+    assign pin_led = led_counter[20];
 
     // Generate reset signal
     reg [5:0] reset_cnt = 0;
     wire reset = ~reset_cnt[5];
-    always @(posedge clk_48mhz)
+    always @(posedge clk)
         if ( clk_locked )
             reset_cnt <= reset_cnt + reset;
 
@@ -62,6 +64,7 @@ module tinydfu_tbx (
     // USB DFU - this instanciates the entire USB device.
     usb_dfu_core dfu (
         .clk_48mhz  (clk_48mhz),
+        .clk        (clk),
         .reset      (reset),
 
         // USB signals

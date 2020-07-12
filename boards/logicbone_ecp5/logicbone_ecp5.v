@@ -27,7 +27,11 @@ module logicbone_ecp5 (
 // Use an ecppll generated pll
 wire clk_48mhz;
 wire clk_locked;
+reg  clk_24mhz = 0;
+reg  clk = 0;
 pll pll48( .clkin(refclk), .clkout0(clk_48mhz), .locked( clk_locked ) );
+always @(posedge clk_48mhz) clk_24mhz <= ~clk_24mhz;
+always @(posedge clk_24mhz) clk <= ~clk;
 
 // The SPI serial clock requires a special IP block to access.
 wire flash_sclk;
@@ -37,17 +41,17 @@ USRMCLK usr_sclk(.USRMCLKI(flash_sclk), .USRMCLKTS(1'b0));
 // LED Patterns
 //////////////////////////
 reg [31:0] led_counter;
-always @(posedge clk_48mhz) begin
+always @(posedge clk) begin
     led_counter <= led_counter + 1;
 end
 
 // Simple blink pattern when idle.
-wire [3:0] led_idle = {3'b0, led_counter[23]};
+wire [3:0] led_idle = {3'b0, led_counter[21]};
 
 // Cylon pattern when programming.
 reg [2:0] led_cylon_count = 0;
 reg [3:0] led_cylon = 4'b0;
-always @(posedge led_counter[22]) begin
+always @(posedge led_counter[20]) begin
    if (led_cylon_count) led_cylon_count <= led_cylon_count - 1;
    else led_cylon_count <= 5;
 
@@ -66,7 +70,7 @@ assign led = (dfu_state == 'h02) ? ~led_idle : ~led_cylon;
 reg user_bootmode = 1'b0;
 reg [15:0] reset_delay = 16'hffff;
 wire usb_reset;
-always @(posedge clk_48mhz) begin
+always @(posedge clk) begin
     if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
     if (pwr_button == 1'b0) user_bootmode <= 1'b1;
     if (usb_reset && dfu_state == 8'h01) user_bootmode <= 1'b0;
@@ -82,6 +86,7 @@ wire usb_tx_en;
 // USB DFU - this instanciates the entire USB device.
 usb_dfu_core dfu (
   .clk_48mhz  (clk_48mhz),
+  .clk        (clk),
   .reset      (~user_bootmode),
 
   // USB signals
@@ -134,9 +139,9 @@ BB pin_i2c_scl( .I( 1'b0 ), .T( i2c_scl_drive_n ), .O( i2c_scl_in ), .B( i2c_scl
 BB pin_i2c_sda( .I( 1'b0 ), .T( i2c_sda_drive_n ), .O( i2c_sda_in ), .B( i2c_sda ) );
 
 i2c_bringup #(
-  .CLK_FREQUENCY  ( 48000000 ),
+  .CLK_FREQUENCY  ( 12000000 ),
 ) i2c_bringup_inst (
-  .clk            ( clk_48mhz ),
+  .clk            ( clk ),
   .done           ( i2c_bringup_done ),
   .fail           ( i2c_bringup_fail ),
 

@@ -170,7 +170,7 @@ module usb_dfu (
   reg host_presence_timeout = 0;
 
   usb_serial_ctrl_ep ctrl_ep_inst (
-    .clk(clk_48mhz),
+    .clk(clk),
     .reset(reset),
     .dev_addr(dev_addr),
 
@@ -204,7 +204,8 @@ module usb_dfu (
     .NUM_OUT_EPS(5'd1),
     .NUM_IN_EPS(5'd1)
   ) usb_fs_pe_inst (
-    .clk(clk_48mhz),
+    .clk_48mhz(clk_48mhz),
+    .clk(clk),
     .reset(reset),
 
     .usb_p_tx(usb_p_tx),
@@ -248,7 +249,7 @@ module usb_dfu (
   // host presence detection
   ////////////////////////////////////////////////////////////////////////////////
 
-  always @(posedge clk_48mhz) begin
+  always @(posedge clk) begin
     if (sof_valid) begin
       host_presence_timer <= 0;
       host_presence_timeout <= 0;
@@ -256,7 +257,7 @@ module usb_dfu (
       host_presence_timer <= host_presence_timer + 1;
     end
 
-    if (host_presence_timer > 48000000) begin
+    if (host_presence_timer > 196000000) begin
       host_presence_timeout <= 1;
     end
   end

@@ -1,4 +1,4 @@
-/* DFU Board information definitions for the Logicbone ECP5 */
+/* DFU Board information definitions for the TinyFPGA BX */
 localparam SPI_FLASH_SIZE = (1 * 1024 *1024);
 localparam SPI_PAGE_SIZE  = 256;
 
@@ -21,4 +21,4 @@ localparam BOARD_PID = 'h6130;  /* TinyFPGA Bootloader */
 
 /* String Descriptors */
 localparam BOARD_MFR_NAME = "TinyFPGA";
-localparam BOARD_PRODUCT_NAME = "TinyFPGA";
+localparam BOARD_PRODUCT_NAME = "TinyFPGA Boot";
