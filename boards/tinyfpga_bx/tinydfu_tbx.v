@@ -108,8 +108,8 @@ module tinydfu_tbx (
 
     // USB Physical interface
     usb_phy_ice40 phy (
-        .clk_48mhz  (clk_48mhz),
-        .reset      (usb_reset),
+        .clk (clk),
+        .reset (usb_reset),
 
         .pin_usb_p (pin_usb_p),
         .pin_usb_n (pin_usb_n),

@@ -9,7 +9,7 @@ module usb_reset_det (
 
   // USB reset is signalled by single-ended zero state for 10ms.
   // Devices may reset after SE0 is detected for 2.5us or more.
-  localparam RESET_TIMEOUT = 30000;
+  localparam RESET_TIMEOUT = 12000;
 
   // reset detection
   reg [16:0] reset_timer = RESET_TIMEOUT;

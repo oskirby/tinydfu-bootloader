@@ -109,8 +109,8 @@ usb_dfu_core dfu (
 
 // USB Physical interface
 usb_phy_ecp5 phy (
-  .clk_48mhz  (clk_48mhz),
-  .reset      (usb_reset),
+  .clk (clk_48mhz),
+  .reset (usb_reset),
 
   .pin_usb_p (usb_ufp_dp),
   .pin_usb_n (usb_ufp_dm),
