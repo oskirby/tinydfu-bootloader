@@ -22,7 +22,7 @@ SOURCES = \
 	$(RTL_USB_DIR)/usb_dfu_ctrl_ep.v \
 	$(RTL_USB_DIR)/usb_spiflash_bridge.v \
 	$(RTL_USB_DIR)/usb_dfu_core.v \
-	$(RTL_USB_DIR)/usb_dfu_i40.v \
+	$(RTL_USB_DIR)/usb_phy_ice40.v \
 	pll.v
 
 SRC = $(PROJTOP).v $(SOURCES)
@@ -45,7 +45,7 @@ $(PROJTOP).json: $(SRC)
 	yosys -q -p 'synth_ice40 -top $(PROJTOP) -json $@' $^
 
 %.asc: $(PIN_DEF) %.json
-	nextpnr-ice40 --$(DEVICE) --freq $(CLK_MHZ) --opt-timing --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@
+	nextpnr-ice40 -r --$(DEVICE) --freq $(CLK_MHZ) --opt-timing --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@
 
 gui: $(PIN_DEF) $(PROJTOP).json
 	nextpnr-ice40 --$(DEVICE) --package $(PACKAGE) --pcf $(PIN_DEF) --json $(PROJTOP).json --asc $(PROJTOP).asc --gui

@@ -23,8 +23,9 @@ SOURCES = \
 	$(RTL_USB_DIR)/usb_dfu_ctrl_ep.v \
 	$(RTL_USB_DIR)/usb_spiflash_bridge.v \
 	$(RTL_USB_DIR)/usb_dfu_core.v \
-	$(RTL_USB_DIR)/usb_dfu_ecp5.v \
+	$(RTL_USB_DIR)/usb_phy_ecp5.v \
 	$(RTL_I2C_DIR)/i2c_master.v \
+	i2c_bringup.v \
 	logicbone_pll.v
 
 SRC = $(PROJTOP).v $(SOURCES)

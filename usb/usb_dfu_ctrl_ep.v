@@ -466,6 +466,15 @@ module usb_dfu_ctrl_ep #(
           dfu_altsetting <= wValue;
         end
 
+        'h100 : begin
+          // DFU_DETACH
+          rom_mux    <= ROM_FIRMWARE;
+          rom_addr   <= 0;
+          rom_length <= wLength;
+          
+          dfu_mem['h004] <= DFU_STATE_appDETACH;
+        end
+
         'h101 : begin
           // DFU_DNLOAD
           if (dfu_mem['h004] == DFU_STATE_dfuIDLE) begin

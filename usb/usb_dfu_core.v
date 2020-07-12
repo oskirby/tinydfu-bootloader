@@ -116,7 +116,7 @@ serial.v        - width adapter (x widths to y widths)
 
 */
 
-module usb_dfu_core(
+module usb_dfu_core (
   input  clk_48mhz,
   input reset,
 
@@ -255,23 +255,5 @@ module usb_dfu_core(
     // Debug
     .debug(debug[11:4])
   );
-
-
-  ////////////////////////////////////////////////////////////////////////////////
-  // host presence detection
-  ////////////////////////////////////////////////////////////////////////////////
-
-//   always @(posedge clk_48mhz) begin
-//     if (sof_valid) begin
-//       host_presence_timer <= 0;
-//       host_presence_timeout <= 0;
-//     end else begin
-//       host_presence_timer <= host_presence_timer + 1;
-//     end
-
-//     if (host_presence_timer > 48000000) begin
-//       host_presence_timeout <= 1;
-//     end
-//   end
 
 endmodule

@@ -59,14 +59,17 @@ module tinydfu_tbx (
     wire usb_n_rx;
     wire usb_tx_en;
 
-    // usb DFU - this instanciates the entire USB device.
-    usb_dfu dfu (
+    // USB DFU - this instanciates the entire USB device.
+    usb_dfu_core dfu (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
-        // pins
-        .pin_usb_p( pin_usb_p ),
-        .pin_usb_n( pin_usb_n ),
+        // USB signals
+        .usb_p_tx( usb_p_tx ),
+        .usb_n_tx( usb_n_tx ),
+        .usb_p_rx( usb_p_rx ),
+        .usb_n_rx( usb_n_rx ),
+        .usb_tx_en( usb_tx_en ),
 
         // SPI
         .spi_csel( pin_16_cs ),
@@ -75,6 +78,21 @@ module tinydfu_tbx (
         .spi_miso( pin_17_miso ),  
 
         .debug( debug )
+    );
+
+    // USB Physical interface
+    usb_phy_ice40 phy (
+        .clk_48mhz  (clk_48mhz),
+        .reset      (usb_reset),
+
+        .pin_usb_p (pin_usb_p),
+        .pin_usb_n (pin_usb_n),
+
+        .usb_p_tx( usb_p_tx ),
+        .usb_n_tx( usb_n_tx ),
+        .usb_p_rx( usb_p_rx ),
+        .usb_n_rx( usb_n_rx ),
+        .usb_tx_en( usb_tx_en ),
     );
 
     // USB Host Detect Pull Up
