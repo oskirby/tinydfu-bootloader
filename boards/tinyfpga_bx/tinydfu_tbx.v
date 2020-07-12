@@ -22,15 +22,14 @@ module tinydfu_tbx (
     );
 
     wire clk_48mhz;
-    reg  clk_24mhz = 0;
-    reg  clk = 0;
+    wire clk = clkdiv[1];
+    reg [1:0] clkdiv = 0;
 
     wire clk_locked;
 
     // Use an icepll generated pll
     pll pll48( .clock_in(pin_clk), .clock_out(clk_48mhz), .locked( clk_locked ) );
-    always @(posedge clk_48mhz) clk_24mhz = ~clk_24mhz;
-    always @(posedge clk_24mhz) clk = ~clk;
+    always @(posedge clk_48mhz) clkdiv <= clkdiv + 1;
 
     ////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////
