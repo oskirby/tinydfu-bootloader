@@ -1,5 +1,7 @@
 // detects USB port reset signal from host
-module usb_reset_det (
+module usb_reset_det #(
+  parameter IN_CLK_MHZ = 12
+) (
   input clk,
   output reset,
 
@@ -9,7 +11,7 @@ module usb_reset_det (
 
   // USB reset is signalled by single-ended zero state for 10ms.
   // Devices may reset after SE0 is detected for 2.5us or more.
-  localparam RESET_TIMEOUT = 30000;
+  localparam RESET_TIMEOUT = 2500 * IN_CLK_MHZ;
 
   // reset detection
   reg [16:0] reset_timer = RESET_TIMEOUT;
