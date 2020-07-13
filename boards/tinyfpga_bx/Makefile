@@ -46,13 +46,16 @@ $(PROJTOP).json: $(SRC)
 	yosys -q -p 'synth_ice40 -top $(PROJTOP) -json $@' $^
 
 %.asc: $(PIN_DEF) %.json
-	nextpnr-ice40 -r --$(DEVICE) --freq $(CLK_MHZ) --opt-timing --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@
+	nextpnr-ice40 -r --$(DEVICE) --opt-timing --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@ --pre-pack constraints.py
 
 gui: $(PIN_DEF) $(PROJTOP).json
 	nextpnr-ice40 --$(DEVICE) --package $(PACKAGE) --pcf $(PIN_DEF) --json $(PROJTOP).json --asc $(PROJTOP).asc --gui
 
 %.bin: %.asc
-	icepack $< $@
+	icepack $< $(@:.bin=-boot.bin)
+	cp $(@:.bin=-boot.bin) $(@:.bin=-user.bin)
+	icemulti -v -o $(@:.bin=-multi.bin) -a15 -p0 $(@:.bin=-boot.bin) $(@:.bin=-user.bin)
+	(dd if=$(@:.bin=-multi.bin) bs=160 count=1 && cat $(@:.bin=-boot.bin)) > $@
 
 %.rpt: %.asc
 	icetime -d $(DEVICE) -mtr $@ $<
@@ -64,7 +67,7 @@ prog: $(PROJTOP).bin
 	tinyprog -p $<
 
 clean:
-	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin pll.v
+	rm -f $(PROJTOP).json $(PROJTOP).asc $(PROJTOP).rpt $(PROJTOP).bin $(PROJTOP)-*.bin pll.v
 
 .SECONDARY:
 .PHONY: all synth prog clean gui

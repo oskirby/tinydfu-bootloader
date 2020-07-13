@@ -5,7 +5,7 @@
 
   ----------------------------------------------------
   usb_phy_ice40 u_u (
-    .clk_48mhz  (clk_48mhz),
+    .clk        (clk),
     .reset      (reset),
 
     // USB pins
@@ -21,7 +21,7 @@
   );
 */
 module usb_phy_ice40 (
-  input  clk_48mhz,
+  input  clk,
   output reset,
 
   // USB pins
@@ -63,7 +63,7 @@ module usb_phy_ice40 (
     );
 
     usb_reset_det rst_detector(
-        .clk(clk_48mhz),
+        .clk(clk),
         .reset(reset),
         .usb_p_rx(usb_p_in),
         .usb_n_rx(usb_n_in),

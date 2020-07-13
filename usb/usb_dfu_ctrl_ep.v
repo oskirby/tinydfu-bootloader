@@ -454,6 +454,9 @@ module usb_dfu_ctrl_ep #(
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
           rom_length <= 'h00;
+
+          // Consider DFU mode started once we have become configured.
+          dfu_mem['h004] <= (wValue) ? DFU_STATE_dfuIDLE : DFU_STATE_appIDLE;
         end
 
         'h0b : begin
@@ -685,7 +688,7 @@ module usb_dfu_ctrl_ep #(
       dfu_mem['h001] <= 1;                  // bwPollTimeout[0]
       dfu_mem['h002] <= 0;                  // bwPollTimeout[1]
       dfu_mem['h003] <= 0;                  // bwPollTimeout[2]
-      dfu_mem['h004] <= DFU_STATE_dfuIDLE;  // bState
+      dfu_mem['h004] <= DFU_STATE_appIDLE;  // bState
       dfu_mem['h005] <= 0;                  // iString
   end
 
