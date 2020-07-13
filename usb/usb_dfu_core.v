@@ -207,7 +207,7 @@ module usb_dfu_core (
 
     // DFU state and debug
     .dfu_state( dfu_state ),
-    .debug(debug[3:0]),
+    .debug(debug[3:0])
   );
 
   wire nak_in_ep_grant;
