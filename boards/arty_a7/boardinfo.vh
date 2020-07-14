@@ -1,5 +1,6 @@
 /* DFU Board information definitions for the Digilent Arty-A7 */
 localparam SPI_FLASH_SIZE = (16 * 1024 *1024);
+localparam SPI_ERASE_SIZE = 65536;
 localparam SPI_PAGE_SIZE  = 256;
 
 /* Flash partition layout */

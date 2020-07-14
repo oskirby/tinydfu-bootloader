@@ -1,5 +1,6 @@
 /* DFU Board information definitions for the TinyFPGA BX */
 localparam SPI_FLASH_SIZE = (1 * 1024 *1024);
+localparam SPI_ERASE_SIZE = 4096;
 localparam SPI_PAGE_SIZE  = 256;
 
 /* Flash partition layout */

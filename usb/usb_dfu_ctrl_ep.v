@@ -244,6 +244,7 @@ module usb_dfu_ctrl_ep #(
   assign debug[3] = out_ep_acked;
 
   usb_spiflash_bridge #(
+    .ERASE_SIZE(SPI_ERASE_SIZE),
     .PAGE_SIZE(SPI_PAGE_SIZE)
   ) dfu_spiflash_bridge (
     .clk(clk),

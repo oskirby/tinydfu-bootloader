@@ -1,5 +1,5 @@
 module usb_spiflash_bridge #(
-  parameter SECTOR_SIZE = 4096,
+  parameter ERASE_SIZE = 4096,
   parameter PAGE_SIZE = 256
 ) (
   input clk,
@@ -40,9 +40,9 @@ module usb_spiflash_bridge #(
 );
 
   // SPI flash geometry.
-  localparam SECTOR_PAGE_COUNT = (SECTOR_SIZE / PAGE_SIZE);
-  localparam SECTOR_BITS = $clog2(SECTOR_SIZE);
-  localparam PAGE_BITS   = $clog2(PAGE_SIZE);
+  localparam ERASE_PAGE_COUNT = (ERASE_SIZE / PAGE_SIZE);
+  localparam ERASE_BITS = $clog2(ERASE_SIZE);
+  localparam PAGE_BITS  = $clog2(PAGE_SIZE);
 
   // SPI flash commands
   localparam FLASH_CMD_WRITE_ENABLE         = 8'h06;
@@ -98,11 +98,12 @@ module usb_spiflash_bridge #(
   reg [3:0] flash_rstdelay = 4'b1111;
   reg [3:0] flash_state = FLASH_STATE_INIT;
   reg [3:0] flash_state_next = FLASH_STATE_INIT;
+  wire [7:0] flash_erase_cmd = (ERASE_BITS >= 16) ? FLASH_CMD_BLOCK_ERASE_64K : FLASH_CMD_SECTOR_ERASE;
   
   wire [23:0] byte_address;
-  wire [SECTOR_BITS-PAGE_BITS-1:0] page_num;
+  wire [ERASE_BITS-PAGE_BITS-1:0] page_num;
   assign byte_address = address << PAGE_BITS;
-  assign page_num = address[SECTOR_BITS-PAGE_BITS-1:0];
+  assign page_num = address[ERASE_BITS-PAGE_BITS-1:0];
 
   assign debug[0] = (flash_state == FLASH_STATE_WRITE_BUSY);
   assign debug[1] = page_num[0];
@@ -208,7 +209,7 @@ module usb_spiflash_bridge #(
           command_start <= 1;
           command_bits  <= 32;
           command_csel  <= 4;
-          command_buf   <= {32'b0, (security ? FLASH_CMD_ERASE_SECURITY : FLASH_CMD_SECTOR_ERASE), byte_address};
+          command_buf   <= {32'b0, (security ? FLASH_CMD_ERASE_SECURITY : flash_erase_cmd), byte_address};
         end else begin
           flash_state_next <= FLASH_STATE_ERASE_ENABLE;
         end

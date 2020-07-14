@@ -81,7 +81,7 @@ module bootloader (
     end
 
     // Selecty the LED pattern by DFU state.
-    assign led = (dfu_state == 8'h00) ? led_cylon : (dfu_state == 8'h02) ? led_idle : led_cylon;
+    assign led = (dfu_state == 8'h00) ? 4'b1111 : (dfu_state == 8'h02) ? led_idle : led_cylon;
 
     /////////////////////////
     // Reset and Multiboot
