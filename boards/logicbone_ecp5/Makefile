@@ -39,6 +39,7 @@ PACKAGE = CABGA381
 BOOTADDR = 0x100000 # User image starts at 1MB
 
 all: $(PROJTOP).bit $(PROJTOP).hex $(PROJTOP).svf
+bootloader: $(PROJTOP).bit
 
 synth: $(PROJTOP).json
 
@@ -60,8 +61,11 @@ $(PROJTOP).json: $(SRC)
 prog: $(PROJTOP).svf
 	openocd -f logicbone-jlink.cfg -c "transport select jtag; init; svf $<; exit"
 
+dfu: $(PROJTOP).bit
+	dfu-util -d 1d50:615d -a2 -D $<
+
 clean:
 	rm -f $(PROJTOP).json $(PROJTOP).svf $(PROJTOP).bit $(PROJTOP)_out.config $(PROJTOP).hex
 
 .SECONDARY:
-.PHONY: all synth prog clean gui
+.PHONY: all bitstream synth prog dfu clean gui

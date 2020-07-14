@@ -20,9 +20,12 @@ module logicbone_ecp5 (
     // i2c interface
     inout        i2c_scl,
     inout        i2c_sda,
-                       
+
     output [15:0] debug
 );
+
+wire i2c_bringup_done;
+wire i2c_bringup_fail;
 
 // Use an ecppll generated pll
 wire clk_48mhz;
@@ -75,7 +78,7 @@ always @(posedge clk) begin
     if (pwr_button == 1'b0) user_bootmode <= 1'b1;
     if (usb_reset && dfu_state == 8'h01) user_bootmode <= 1'b0;
 end
-BB pin_resetn( .I( 1'b0 ), .T( user_bootmode || reset_delay ), .O( ), .B( resetn ) );
+BB pin_resetn( .I( 1'b0 ), .T( user_bootmode || reset_delay || ~i2c_bringup_done), .O( ), .B( resetn ) );
 
 wire usb_p_tx;
 wire usb_n_tx;
@@ -87,7 +90,7 @@ wire usb_tx_en;
 usb_dfu_core dfu (
   .clk_48mhz  (clk_48mhz),
   .clk        (clk),
-  .reset      (~user_bootmode),
+  .reset      (usb_reset || ~user_bootmode),
 
   // USB signals
   .usb_p_tx( usb_p_tx ),
@@ -128,9 +131,6 @@ BB pin_usb_pull( .I( 1'b1 ), .T( ~user_bootmode ), .O( ), .B( usb_ufp_pull ) );
 //////////////////////////
 // I2C Board Setup
 //////////////////////////
-wire i2c_bringup_done;
-wire i2c_bringup_fail;
-
 wire i2c_scl_in;
 wire i2c_scl_drive_n;
 wire i2c_sda_in;

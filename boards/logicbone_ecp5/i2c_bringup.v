@@ -127,9 +127,8 @@ localparam I2C_SEQ_WRITE_DFP_GPIO1        = 19'b0000000000000100000;
 localparam I2C_SEQ_WRITE_DFP_GPIO2        = 19'b0000000000001000000;
 localparam I2C_SEQ_WRITE_DFP_ROLECTL      = 19'b0000000000010000000;
 localparam I2C_SEQ_COMMAND_DFP_SINK       = 19'b0000000000100000000;
-localparam I2C_SEQ_READ_DFP_PWRSTAT       = 19'b0000000001000000000;
-localparam I2C_SEQ_DONE                   = 19'b0000000010000000000;
-localparam I2C_SEQ_FAIL                   = 19'b0000000100000000000;
+localparam I2C_SEQ_DONE                   = 19'b0000000001000000000;
+localparam I2C_SEQ_FAIL                   = 19'b0000000010000000000;
 reg [17:0]                 i2c_seq_state;
 reg [17:0]                 next_i2c_seq_state;
 
@@ -267,19 +266,7 @@ always @(*) begin
     i2c_address         = FUSB307_BUS_ADDR;
     i2c_write_length    = 2;
     i2c_read_length     = 0;
-    i2c_write_data      = {16'b0, 8'h99, FUSB307_REG_COMMAND};
-    //i2c_write_data      = {16'b0, 8'h61, FUSB307_REG_PWRCTRL};
-
-    next_i2c_start = ~i2c_busy;
-    if (i2c_busy_end) next_i2c_seq_state = I2C_SEQ_READ_DFP_PWRSTAT;
-  end
-  
-  // Debug - check if we successfully enabled the DFP port.
-  I2C_SEQ_READ_DFP_PWRSTAT: begin
-    i2c_address         = FUSB307_BUS_ADDR;
-    i2c_write_length    = 1;
-    i2c_read_length     = 3;
-    i2c_write_data      = {24'b0, FUSB307_REG_CCSTAT};
+    i2c_write_data      = {16'b0, 8'h77, FUSB307_REG_COMMAND};
 
     next_i2c_start = ~i2c_busy;
     if (i2c_busy_end) begin
@@ -289,6 +276,7 @@ always @(*) begin
   end
 
   I2C_SEQ_DONE: begin
+    next_i2c_seq_state = I2C_SEQ_DONE;
   end
       
   endcase
