@@ -32,7 +32,7 @@ module bootloader (
   output [3:0] led
 );
 
-    localparam c_user_start = 48'h0000_0200_0000;
+    `include "boardinfo.vh" 
 
     wire usb_p_tx;
     wire usb_n_tx;
@@ -48,13 +48,15 @@ module bootloader (
     reg [1:0] clkdiv = 0;
     wire clk = clkdiv[1];
     wire clk_48mhz;
-    wire clk_locked = 1'b1; // FIXME!
+    wire clk_locked;
     always @(posedge clk_48mhz) clkdiv <= clkdiv + 1;
 
     usb_pll_clkwiz pll
     (
         .clk_out1(clk_48mhz),
-        .clk_in1(refclk)
+        .clk_in1(refclk),
+	.locked(clk_locked),
+	.reset(reset)
     );
 
     /////////////////////////
@@ -90,10 +92,18 @@ module bootloader (
     reg [15:0] reset_delay = 16'hffff;
     wire usb_reset;
     always @(posedge clk) begin
-        if (clk_locked && reset_delay) reset_delay <= reset_delay;
+        if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
 	if (boot_button) user_bootmode <= 1'b1;
 	if (usb_reset && dfu_state == 8'h01) user_bootmode <= 1'b0;
     end
+
+    wbicapetwo #(
+        .G_START_ADDRESS(USERPART_START)
+    ) warmboot (
+        .clk(clk_48mhz),
+        .reset(reset),
+        .boot(~reset_delay && ~user_bootmode)
+    );
 
     /////////////////////////
     // USB DFU Device
@@ -137,13 +147,4 @@ module bootloader (
 
     assign pin_usb_pull = 1'b1;
   
-  wbicapetwo #(
-    .G_START_ADDRESS(c_user_start)
-    )                        
-  wbicapetwo_inst (
-    .clk(clk_48mhz),
-    .reset(reset),
-    .boot(boot)
-  );
-
 endmodule
