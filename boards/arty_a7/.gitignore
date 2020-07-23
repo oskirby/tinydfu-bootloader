@@ -1,0 +1,11 @@
+# Ignore Vivado generated content.
+*.bit
+*.dcp
+*.log
+*.jou
+*.prm
+*.xpr
+*.cache/
+*.hw/
+*.srcs/
+

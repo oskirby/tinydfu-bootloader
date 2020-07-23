@@ -1,6 +1,6 @@
 module usb_dfu_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
-  parameter MAX_OUT_PACKET_SIZE = 32,
+  parameter MAX_OUT_PACKET_SIZE = 32
 ) (
   input clk,
   input reset,
@@ -42,7 +42,7 @@ module usb_dfu_ctrl_ep #(
   // DFU State and debug
   ////////////////////
   output [7:0] dfu_state,
-  output [7:0] debug,
+  output [7:0] debug
 );
 
   // Get flash partition information
@@ -209,12 +209,12 @@ module usb_dfu_ctrl_ep #(
     dfu_part_size[ALT_MODE_BOOTPART]  <= BOOTPART_SIZE / SPI_PAGE_SIZE;
   end
   
-  genvar alt_num;
+  genvar alt_part;
   generate
-    for (alt_num = ALT_MODE_SECURITY; alt_num < ALT_MODE_MAX; alt_num = alt_num + 1) begin
+    for (alt_part = ALT_MODE_SECURITY; alt_part < ALT_MODE_MAX; alt_part = alt_part + 1) begin
       initial begin
-        dfu_part_start[alt_num] <= (alt_num - ALT_MODE_SECURITY + 1) << (SPI_SECURITY_REG_SHIFT - $clog2(SPI_PAGE_SIZE));
-        dfu_part_size[alt_num]  <= 1;
+        dfu_part_start[alt_part] <= (alt_part - ALT_MODE_SECURITY + 1) << (SPI_SECURITY_REG_SHIFT - $clog2(SPI_PAGE_SIZE));
+        dfu_part_size[alt_part]  <= 1;
       end
     end
   endgenerate
@@ -244,6 +244,7 @@ module usb_dfu_ctrl_ep #(
   assign debug[3] = out_ep_acked;
 
   usb_spiflash_bridge #(
+    .ERASE_SIZE(SPI_ERASE_SIZE),
     .PAGE_SIZE(SPI_PAGE_SIZE)
   ) dfu_spiflash_bridge (
     .clk(clk),
@@ -744,8 +745,9 @@ endgenerate
 // Generate String ROMS for Board Description
 ///////////////////////////////////////////////////////////
 
+genvar i;
+
 `define INIT_STRING_ROM(_idx_, _str_) \
-  genvar i;                                                 \
   generate                                                  \
     initial begin                                           \
       str_rom[str_addr(_idx_) + 0] <= 2 + $size(_str_) / 4; \
