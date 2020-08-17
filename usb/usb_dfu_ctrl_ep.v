@@ -3,7 +3,10 @@ module usb_dfu_ctrl_ep #(
   parameter MAX_OUT_PACKET_SIZE = 32
 ) (
   input clk,
+  input clk_48mhz,
   input reset,
+
+  input usb_reset,
   output [6:0] dev_addr,
 
   ////////////////////
@@ -41,6 +44,7 @@ module usb_dfu_ctrl_ep #(
   ////////////////////
   // DFU State and debug
   ////////////////////
+  output reg dfu_detach = 0,
   output [7:0] dfu_state,
   output [7:0] debug
 );
@@ -85,6 +89,8 @@ module usb_dfu_ctrl_ep #(
   localparam DFU_STATE_dfuMANIFEST_WAIT_RESET = 'h08;
   localparam DFU_STATE_dfuUPLOAD_IDLE = 'h09;
   localparam DFU_STATE_dfuERROR = 'h0a;
+
+  localparam DFU_DETACH_TIMEOUT = 1000;
 
   localparam ALT_MODE_USERPART = 'h00;
   localparam ALT_MODE_DATAPART = 'h01;
@@ -193,6 +199,9 @@ module usb_dfu_ctrl_ep #(
   wire rom_data_put;
   assign rom_data_put = (ctrl_xfr_state == DATA_IN && more_data_to_send) && in_ep_data_free;
 
+  reg save_dev_addr = 0;
+  reg [6:0] new_dev_addr = 0;
+
   // Select the flash partition based on altsetting.
   wire       dfu_part_security = (dfu_altsetting >= ALT_MODE_SECURITY);
   reg [15:0] dfu_part_start[ALT_MODE_MAX-1:0];
@@ -219,6 +228,9 @@ module usb_dfu_ctrl_ep #(
     end
   endgenerate
   
+  ////////////////////////////////////////////////////////////////////////////////
+  // DFU SPI Flash Interface
+  ////////////////////////////////////////////////////////////////////////////////
   assign dfu_state = dfu_mem['h004];
   reg [15:0] dfu_altsetting = 0;
   reg [15:0] dfu_block_offset = 0;
@@ -272,14 +284,38 @@ module usb_dfu_ctrl_ep #(
     .debug(dfu_debug)
   );
 
-  reg save_dev_addr = 0;
-  reg [6:0] new_dev_addr = 0;
+  ////////////////////////////////////////////////////////////////////////////////
+  // DFU Detach Timer
+  ////////////////////////////////////////////////////////////////////////////////
+  // Prescale the 48MHz clock down to 3Mhz.
+  // Generate a 1ms clock by dividing the 48Mhz high speed clock.
+  reg [14:0] dfu_msec_counter = 0;
+  reg dfu_msec_clk = 0;
+  always @(posedge clk_48mhz) begin
+    if (dfu_msec_counter) dfu_msec_counter <= dfu_msec_counter - 1;
+    else begin
+      dfu_msec_clk <= ~dfu_msec_clk;
+      dfu_msec_counter <= 23999; /* 0.5ms in 48MHz clocks */
+    end
+  end
+  
+  // The DFU specification suggests that a USB reset from the dfuIDLE state should
+  // return the device to application run-time mode. However, as an extension we
+  // have also support the DFU_DETACH command which starts the detach timer.
+  reg [15:0] dfu_detach_timer = DFU_DETACH_TIMEOUT;
+  always @(posedge dfu_msec_clk) begin
+    if (usb_reset && dfu_mem['h004] != DFU_STATE_appIDLE) begin
+      dfu_detach <= 1'b1;
+    end
+    if (dfu_mem['h004] == DFU_STATE_appDETACH) begin
+        if (dfu_detach_timer) dfu_detach_timer <= dfu_detach_timer - 1;
+        else dfu_detach <= 1'b1;
+    end
+  end
 
   ////////////////////////////////////////////////////////////////////////////////
   // control transfer state machine
   ////////////////////////////////////////////////////////////////////////////////
-
-
   always @* begin
     setup_stage_end <= 0;
     data_stage_end <= 0;
@@ -677,8 +713,8 @@ module usb_dfu_ctrl_ep #(
       cfg_rom[(ALT_MODE_MAX * 9) + 'h09] <= 9;           // bFunctionLength
       cfg_rom[(ALT_MODE_MAX * 9) + 'h0A] <= 'h21;        // bDescriptorType
       cfg_rom[(ALT_MODE_MAX * 9) + 'h0B] <= 'h0f;        // bmAttributes
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0C] <= 255;         // wDetachTimeout[0]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0D] <= 0;           // wDetachTimeout[1]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0C] <= DFU_DETACH_TIMEOUT >> 0; // wDetachTimeout[0]
+      cfg_rom[(ALT_MODE_MAX * 9) + 'h0D] <= DFU_DETACH_TIMEOUT >> 8; // wDetachTimeout[1]
       cfg_rom[(ALT_MODE_MAX * 9) + 'h0E] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
       cfg_rom[(ALT_MODE_MAX * 9) + 'h0F] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
       cfg_rom[(ALT_MODE_MAX * 9) + 'h10] <= 'h10;        // bcdDFUVersion[0]

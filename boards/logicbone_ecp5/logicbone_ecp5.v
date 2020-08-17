@@ -64,6 +64,7 @@ always @(posedge led_counter[20]) begin
 end
 
 // Select the LED pattern by DFU state.
+wire dfu_detach;
 wire [7:0] dfu_state;
 assign led = (dfu_state == 'h02) ? ~led_idle : ~led_cylon;
 
@@ -72,11 +73,10 @@ assign led = (dfu_state == 'h02) ? ~led_idle : ~led_cylon;
 //////////////////////////
 reg user_bootmode = 1'b0;
 reg [15:0] reset_delay = 16'hffff;
-wire usb_reset;
 always @(posedge clk) begin
     if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
     if (pwr_button == 1'b0) user_bootmode <= 1'b1;
-    if (usb_reset && dfu_state == 8'h01) user_bootmode <= 1'b0;
+    if (dfu_detach) user_bootmode <= 1'b0;
 end
 BB pin_resetn( .I( 1'b0 ), .T( user_bootmode || reset_delay || ~i2c_bringup_done), .O( ), .B( resetn ) );
 
@@ -90,7 +90,7 @@ wire usb_tx_en;
 usb_dfu_core dfu (
   .clk_48mhz  (clk_48mhz),
   .clk        (clk),
-  .reset      (usb_reset || ~user_bootmode),
+  .reset      (~user_bootmode),
 
   // USB signals
   .usb_p_tx( usb_p_tx ),
@@ -106,15 +106,13 @@ usb_dfu_core dfu (
   .spi_miso( flash_miso ),
 
   // DFU State and debug
+  .dfu_detach( dfu_detach ),
   .dfu_state( dfu_state ),
   .debug( )
 );
 
 // USB Physical interface
 usb_phy_ecp5 phy (
-  .clk (clk_48mhz),
-  .reset (usb_reset),
-
   .pin_usb_p (usb_ufp_dp),
   .pin_usb_n (usb_ufp_dm),
 

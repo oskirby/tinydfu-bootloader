@@ -136,6 +136,7 @@ module usb_dfu_core (
   input spi_miso,
 
   // DFU state and debug
+  output dfu_detach,
   output [7:0] dfu_state,
   output [11:0] debug
 );
@@ -148,6 +149,7 @@ module usb_dfu_core (
   ////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////////
 
+  reg usb_reset = 0;
   wire [6:0] dev_addr;
   wire [7:0] out_ep_data;
 
@@ -176,7 +178,9 @@ module usb_dfu_core (
 
   usb_dfu_ctrl_ep dfu_ep_inst (
     .clk(clk),
+    .clk_48mhz(clk_48mhz),
     .reset(reset),
+    .usb_reset(usb_reset),
     .dev_addr(dev_addr),
 
     // out endpoint interface
@@ -206,7 +210,8 @@ module usb_dfu_core (
     .spi_miso(spi_miso),
 
     // DFU state and debug
-    .dfu_state( dfu_state ),
+    .dfu_detach(dfu_detach),
+    .dfu_state(dfu_state),
     .debug(debug[3:0])
   );
 
@@ -257,5 +262,26 @@ module usb_dfu_core (
     // Debug
     .debug(debug[11:4])
   );
+
+  ///////////////////////////
+  // USB Reset Detection
+  ///////////////////////////
+  // USB reset is signalled by single-ended zero state for 10ms.
+  // Devices may reset after SE0 is detected for 2.5us or more.
+  localparam USB_RESET_TIMEOUT = (5 * 48);
+
+  // reset detection
+  reg [$clog2(USB_RESET_TIMEOUT)-1:0] usb_reset_timer = USB_RESET_TIMEOUT;
+  always @(posedge clk_48mhz) begin
+    if (usb_p_rx || usb_n_rx) begin
+      usb_reset_timer <= USB_RESET_TIMEOUT;
+      usb_reset <= 1'b0;
+    end else if (usb_reset_timer) begin
+      usb_reset_timer <= usb_reset_timer - 1;
+      usb_reset <= 1'b0;
+    end else begin
+      usb_reset <= 1'b1;
+    end
+  end
 
 endmodule

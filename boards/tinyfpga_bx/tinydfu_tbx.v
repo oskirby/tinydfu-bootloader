@@ -54,18 +54,12 @@ module tinydfu_tbx (
     reg user_bootmode = 1'b0;
     reg [15:0] reset_delay = 12000;
     reg [31:0] boot_delay = (12000000 * 3); // Give the user 3 seconds to enumerate USB.
-    wire usb_reset;
+    wire dfu_detach;
     always @(posedge clk) begin
         // Stay in the bootloader if USB enumeration completes before boot_delay times out.
         if (clk_locked && reset_delay) reset_delay <= reset_delay - 1;
         if (clk_locked && boot_delay) boot_delay <= boot_delay - 1;
-        if (dfu_state != 8'h00) user_bootmode <= 1'b1;
-        
-        // If we find outself in appDETACH and a USB reset occurs - start the user image.
-        if (dfu_state == 8'h01 && usb_reset) begin
-            user_bootmode <= 1'b0; 
-            boot_delay <= 0;
-        end
+        if (dfu_detach) user_bootmode <= 1'b1;
     end
   
     SB_WARMBOOT warmboot_inst (
@@ -102,15 +96,13 @@ module tinydfu_tbx (
         .spi_mosi( pin_14_mosi ),
         .spi_miso( pin_17_miso ),  
 
+        .dfu_detach( dfu_detach ),
         .dfu_state( dfu_state ),
         .debug( debug )
     );
 
     // USB Physical interface
     usb_phy_ice40 phy (
-        .clk (clk),
-        .reset (usb_reset),
-
         .pin_usb_p (pin_usb_p),
         .pin_usb_n (pin_usb_n),
 
