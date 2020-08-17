@@ -450,16 +450,9 @@ module usb_dfu_ctrl_ep #(
 
             3 : begin
               // STRING
-              if (wValue[7:0] == 0) begin
-                // Language descriptors
-                rom_mux     <= ROM_ENDPOINT;
-                rom_addr    <= 'h12;
-                rom_length  <= ep_rom['h12]; // bLength
-              end else begin
-                rom_mux     <= ROM_STRING;
-                rom_addr    <= str_addr(wValue[7:0]);
-                rom_length  <= str_rom[str_addr(wValue[7:0])];
-              end
+              rom_mux <= ROM_STRING;
+              rom_addr <= 'h00;
+              rom_length <= str_rom_length;
             end
 
             6 : begin
@@ -654,7 +647,6 @@ module usb_dfu_ctrl_ep #(
 
   reg [7:0] ep_rom[255:0];
   reg [7:0] cfg_rom[255:0];
-  reg [7:0] str_rom[511:0];
   reg [7:0] dfu_mem[5:0];
 
   // Mux the data being read
@@ -662,7 +654,7 @@ module usb_dfu_ctrl_ep #(
     case (rom_mux)
       ROM_ENDPOINT : in_ep_data <= ep_rom[rom_addr];
       ROM_CONFIG   : in_ep_data <= cfg_rom[rom_addr];
-      ROM_STRING   : in_ep_data <= str_rom[rom_addr];
+      ROM_STRING   : in_ep_data <= str_rom_data;
       ROM_DFUSTATE : in_ep_data <= dfu_mem[rom_addr];
       ROM_FIRMWARE : in_ep_data <= dfu_spi_rd_data;
       default      : in_ep_data <= 8'b0;
@@ -752,55 +744,23 @@ endgenerate
 ///////////////////////////////////////////////////////////
 // Generate String ROMS for the Security Registers
 ///////////////////////////////////////////////////////////
-genvar sec_page;
-generate
-  for (sec_page = 0; sec_page < SPI_SECURITY_REGISTERS; sec_page = sec_page + 1) begin
-    initial begin
-      str_rom[9'h0C0 + (sec_page * 32)] <= 30;  // bLength
-      str_rom[9'h0C1 + (sec_page * 32)] <= 3;   // bDescriptorType == STRING
-      str_rom[9'h0C2 + (sec_page * 32)] <= "S"; str_rom[9'h0C3 + (sec_page * 32)] <= 0;
-      str_rom[9'h0C4 + (sec_page * 32)] <= "e"; str_rom[9'h0C5 + (sec_page * 32)] <= 0;
-      str_rom[9'h0C6 + (sec_page * 32)] <= "c"; str_rom[9'h0C7 + (sec_page * 32)] <= 0;
-      str_rom[9'h0C8 + (sec_page * 32)] <= "u"; str_rom[9'h0C9 + (sec_page * 32)] <= 0;
-      str_rom[9'h0CA + (sec_page * 32)] <= "r"; str_rom[9'h0CB + (sec_page * 32)] <= 0;
-      str_rom[9'h0CC + (sec_page * 32)] <= "i"; str_rom[9'h0CD + (sec_page * 32)] <= 0;
-      str_rom[9'h0CE + (sec_page * 32)] <= "t"; str_rom[9'h0CF + (sec_page * 32)] <= 0;
-      str_rom[9'h0D0 + (sec_page * 32)] <= "y"; str_rom[9'h0D1 + (sec_page * 32)] <= 0;
-      str_rom[9'h0D2 + (sec_page * 32)] <= " "; str_rom[9'h0D3 + (sec_page * 32)] <= 0;
-      str_rom[9'h0D4 + (sec_page * 32)] <= "R"; str_rom[9'h0D5 + (sec_page * 32)] <= 0;
-      str_rom[9'h0D6 + (sec_page * 32)] <= "e"; str_rom[9'h0D7 + (sec_page * 32)] <= 0;
-      str_rom[9'h0D8 + (sec_page * 32)] <= "g"; str_rom[9'h0D9 + (sec_page * 32)] <= 0;
-      str_rom[9'h0DA + (sec_page * 32)] <= " "; str_rom[9'h0DB + (sec_page * 32)] <= 0;
-      str_rom[9'h0DC + (sec_page * 32)] <= 'h31 + sec_page;
-      str_rom[9'h0DD + (sec_page * 32)] <= 0;
-    end
-  end
-endgenerate
-
-///////////////////////////////////////////////////////////
-// Generate String ROMS for Board Description
-///////////////////////////////////////////////////////////
-
-genvar i;
-
-`define INIT_STRING_ROM(_idx_, _str_) \
-  generate                                                  \
-    initial begin                                           \
-      str_rom[str_addr(_idx_) + 0] <= 2 + $size(_str_) / 4; \
-      str_rom[str_addr(_idx_) + 1] <= 3;                    \
-    end                                                     \
-    for (i = 0; i < $size(_str_); i = i + 8) begin          \
-      initial str_rom[str_addr(_idx_) + 2 + i/4] <=         \
-          _str_[$size(_str_)-i-1 : $size(_str_)-i-8];       \
-      initial str_rom[str_addr(_idx_) + 3 + i/4] <= 8'h00;  \
-    end                                                     \
-  endgenerate
-
-`INIT_STRING_ROM(STR_INDEX_MANUFACTURER, BOARD_MFR_NAME)
-`INIT_STRING_ROM(STR_INDEX_PRODUCT, BOARD_PRODUCT_NAME)
-`INIT_STRING_ROM(STR_INDEX_SERIAL, TEST_SERIAL)
-`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_USERPART, USERPART_NAME)
-`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_DATAPART, DATAPART_NAME)
-`INIT_STRING_ROM(STR_INDEX_PARTITIONS + ALT_MODE_BOOTPART, BOOTPART_NAME)
+wire [7:0] str_rom_data;
+wire [7:0] str_rom_length;
+usb_string_rom#(
+  .STRINGS({
+    BOARD_MFR_NAME, 8'h00,
+    BOARD_PRODUCT_NAME, 8'h00,
+    TEST_SERIAL, 8'h00,
+    USERPART_NAME, 8'h00,
+    DATAPART_NAME, 8'h00,
+    BOOTPART_NAME, 8'h00,
+    {(SPI_SECURITY_REGISTERS){"Security Reg", 8'h00}}
+  })
+) str_rom(
+  .str_index(wValue[7:0]),
+  .rom_addr(rom_addr),
+  .rom_length(str_rom_length),
+  .rom_data(str_rom_data)
+);
 
 endmodule

@@ -19,7 +19,7 @@ SOURCES = \
 	$(RTL_USB_DIR)/usb_fs_rx.v \
 	$(RTL_USB_DIR)/usb_fs_tx_mux.v \
 	$(RTL_USB_DIR)/usb_fs_tx.v \
-	$(RTL_USB_DIR)/usb_reset_det.v \
+	$(RTL_USB_DIR)/usb_string_rom.v \
 	$(RTL_USB_DIR)/usb_dfu_ctrl_ep.v \
 	$(RTL_USB_DIR)/usb_spiflash_bridge.v \
 	$(RTL_USB_DIR)/usb_dfu_core.v \

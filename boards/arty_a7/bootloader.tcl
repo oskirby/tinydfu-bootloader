@@ -18,7 +18,7 @@ read_verilog -sv ${RTL_USB_DIR}/usb_fs_pe.v
 read_verilog -sv ${RTL_USB_DIR}/usb_fs_rx.v
 read_verilog -sv ${RTL_USB_DIR}/usb_fs_tx_mux.v
 read_verilog -sv ${RTL_USB_DIR}/usb_fs_tx.v
-read_verilog -sv ${RTL_USB_DIR}/usb_reset_det.v
+read_verilog -sv ${RTL_USB_DIR}/usb_string_rom.v
 read_verilog -sv ${RTL_USB_DIR}/usb_dfu_core.v
 read_verilog -sv ${RTL_USB_DIR}/usb_dfu_ctrl_ep.v
 read_verilog -sv ${RTL_USB_DIR}/usb_spiflash_bridge.v
