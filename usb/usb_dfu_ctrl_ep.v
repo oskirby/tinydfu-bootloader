@@ -107,7 +107,7 @@ module usb_dfu_ctrl_ep #(
   localparam DATAPART_NAME = "User Data";
   localparam BOOTPART_NAME = "Bootloader";
 
-  localparam TEST_SERIAL = "123456";
+  localparam TEST_SERIAL = BOARD_SERIAL;
 
   function [8:0] str_addr;
     input [7:0] index;
@@ -161,8 +161,8 @@ module usb_dfu_ctrl_ep #(
 
   wire setup_pkt_start = pkt_start && out_ep_setup;
 
-  wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
-  //wire has_data_stage = |wLength;
+  //wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
+  wire has_data_stage = |wLength;
 
   wire out_data_stage;
   assign out_data_stage = has_data_stage && !bmRequestType[7];
