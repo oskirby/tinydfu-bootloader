@@ -1,5 +1,5 @@
 /*
-   usb_dfu
+   usb_serial_core
 
   Luke Valenti's USB module, as adapted by Lawrie Griffiths and Owen Kirby.
 
@@ -8,7 +8,7 @@
   Instanciation template with separate pipe signals
 
   ----------------------------------------------------
-  usb_dfu_core_np dfu (
+  usb_serual_core dfu (
     .clk_48mhz  (clk_48mhz),
     .reset      (reset),
 
@@ -116,7 +116,7 @@ serial.v        - width adapter (x widths to y widths)
 
 */
 
-module usb_dfu_core (
+module usb_serial_core (
   input  clk_48mhz,
   input  clk,
   input  reset,
@@ -129,12 +129,16 @@ module usb_dfu_core (
   input  usb_n_rx,
   output usb_tx_en,
 
-  // SPI lines.
-  output spi_csel,
-  output spi_clk,
-  output spi_mosi,
-  input spi_miso,
+  // uart pipeline in (into the module, out of the device, into the host)
+  input [7:0] uart_in_data,
+  input       uart_in_valid,
+  output      uart_in_ready,
 
+  // uart pipeline out (out of the host, into the device, out of the module)
+  output [7:0] uart_out_data,
+  output       uart_out_valid,
+  input        uart_out_ready,
+  
   // DFU state and debug
   output dfu_detach,
   output [7:0] dfu_state,
@@ -176,7 +180,7 @@ module usb_dfu_core (
   reg [31:0] host_presence_timer = 0;
   reg host_presence_timeout = 0;
 
-  usb_dfu_ctrl_ep dfu_ep_inst (
+  usb_serial_ctrl_ep ctrl_ep_inst (
     .clk(clk),
     .clk_48mhz(clk_48mhz),
     .reset(reset),
@@ -203,25 +207,64 @@ module usb_dfu_core (
     .in_ep_stall(ctrl_in_ep_stall),
     .in_ep_acked(ctrl_in_ep_acked),
 
-    // SPI flash interface
-    .spi_csel(spi_csel),
-    .spi_clk(spi_clk),
-    .spi_mosi(spi_mosi),
-    .spi_miso(spi_miso),
-
     // DFU state and debug
-    .dfu_detach(dfu_detach),
-    .dfu_state(dfu_state),
-    .debug(debug[3:0])
+    .dfu_detach(dfu_detach)
   );
 
-  wire nak_in_ep_grant;
-  wire nak_in_ep_data_free;
-  wire nak_in_ep_acked;
+  wire uart_in_ep_req;
+  wire uart_in_ep_grant;
+  wire uart_in_ep_data_free;
+  wire uart_in_ep_data_put;
+  wire [7:0] uart_in_ep_data;
+  wire uart_in_ep_data_done;
+  wire uart_in_ep_stall;
+  wire uart_in_ep_acked;
+  usb_uart_in_ep in_ep_inst (
+    .clk(clk),
+    .reset(reset),
+
+    .in_ep_req(uart_in_ep_req),
+    .in_ep_grant(uart_in_ep_grant),
+    .in_ep_data_free(uart_in_ep_data_free),
+    .in_ep_data_put(uart_in_ep_data_put),
+    .in_ep_data(uart_in_ep_data),
+    .in_ep_data_done(uart_in_ep_data_done),
+    .in_ep_stall(uart_in_ep_stall),
+    .in_ep_acked(uart_in_ep_acked),
+
+    .uart_in_data(uart_in_data),
+    .uart_in_valid(uart_in_valid),
+    .uart_in_ready(uart_in_ready)
+  );
+
+  wire uart_out_ep_req;
+  wire uart_out_ep_grant;
+  wire uart_out_ep_data_avail;
+  wire uart_out_ep_setup;
+  wire uart_out_ep_data_get;
+  wire uart_out_ep_stall;
+  wire uart_out_ep_acked;
+  usb_uart_out_ep out_ep_inst (
+    .clk(clk),
+    .reset(reset),
+
+    .out_ep_req(uart_out_ep_req),
+    .out_ep_grant(uart_out_ep_grant),
+    .out_ep_data_avail(uart_out_ep_data_avail),
+    .out_ep_setup(uart_out_ep_setup),
+    .out_ep_data_get(uart_out_ep_data_get),
+    .out_ep_data(out_ep_data),
+    .out_ep_stall(uart_out_ep_stall),
+    .out_ep_acked(uart_out_ep_acked),
+
+    .uart_out_data(uart_out_data),
+    .uart_out_valid(uart_out_valid),
+    .uart_out_ready(uart_out_ready)
+  );
 
   usb_fs_pe #(
-    .NUM_OUT_EPS(5'd1),
-    .NUM_IN_EPS(5'd1)
+    .NUM_OUT_EPS(5'd2),
+    .NUM_IN_EPS(5'd2)
   ) usb_fs_pe_inst (
     .clk_48mhz(clk_48mhz),
     .clk(clk),
@@ -236,24 +279,24 @@ module usb_dfu_core (
     .dev_addr(dev_addr),
 
     // out endpoint interfaces
-    .out_ep_req({ctrl_out_ep_req}),
-    .out_ep_grant({ctrl_out_ep_grant}),
-    .out_ep_data_avail({ctrl_out_ep_data_avail}),
-    .out_ep_setup({ctrl_out_ep_setup}),
-    .out_ep_data_get({ctrl_out_ep_data_get}),
-    .out_ep_data(out_ep_data),
-    .out_ep_stall({ctrl_out_ep_stall}),
-    .out_ep_acked({ctrl_out_ep_acked}),
+    .out_ep_req       ({uart_out_ep_req,        ctrl_out_ep_req}),
+    .out_ep_grant     ({uart_out_ep_grant,      ctrl_out_ep_grant}),
+    .out_ep_data_avail({uart_out_ep_data_avail, ctrl_out_ep_data_avail}),
+    .out_ep_setup     ({uart_out_ep_setup,      ctrl_out_ep_setup}),
+    .out_ep_data_get  ({uart_out_ep_data_get,   ctrl_out_ep_data_get}),
+    .out_ep_data      (out_ep_data),
+    .out_ep_stall     ({uart_out_ep_stall,      ctrl_out_ep_stall}),
+    .out_ep_acked     ({uart_out_ep_acked,      ctrl_out_ep_acked}),
 
     // in endpoint interfaces
-    .in_ep_req({ctrl_in_ep_req}),
-    .in_ep_grant({ctrl_in_ep_grant}),
-    .in_ep_data_free({ctrl_in_ep_data_free}),
-    .in_ep_data_put({ctrl_in_ep_data_put}),
-    .in_ep_data({ctrl_in_ep_data[7:0]}),
-    .in_ep_data_done({ctrl_in_ep_data_done}),
-    .in_ep_stall({ctrl_in_ep_stall}),
-    .in_ep_acked({ctrl_in_ep_acked}),
+    .in_ep_req        ({uart_in_ep_req,         ctrl_in_ep_req}),
+    .in_ep_grant      ({uart_in_ep_grant,       ctrl_in_ep_grant}),
+    .in_ep_data_free  ({uart_in_ep_data_free,   ctrl_in_ep_data_free}),
+    .in_ep_data_put   ({uart_in_ep_data_put,    ctrl_in_ep_data_put}),
+    .in_ep_data       ({uart_in_ep_data[7:0],   ctrl_in_ep_data[7:0]}),
+    .in_ep_data_done  ({uart_in_ep_data_done,   ctrl_in_ep_data_done}),
+    .in_ep_stall      ({uart_in_ep_stall,       ctrl_in_ep_stall}),
+    .in_ep_acked      ({uart_in_ep_acked,       ctrl_in_ep_acked}),
 
     // sof interface
     .sof_valid(sof_valid),

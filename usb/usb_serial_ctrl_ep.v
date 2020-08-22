@@ -1,6 +1,9 @@
-module usb_dfu_ctrl_ep #(
+module usb_serial_ctrl_ep #(
   parameter MAX_IN_PACKET_SIZE = 32,
-  parameter MAX_OUT_PACKET_SIZE = 32
+  parameter MAX_OUT_PACKET_SIZE = 32,
+  parameter CDC_ACM_ENDPOINT = 2,
+  parameter CDC_RX_ENDPOINT = 1,
+  parameter CDC_TX_ENDPOINT = 1
 ) (
   input clk,
   input clk_48mhz,
@@ -34,18 +37,9 @@ module usb_dfu_ctrl_ep #(
   input in_ep_acked,
 
   ///////////////////////////
-  // SPI interface
+  // DFU Detach Signalling
   ///////////////////////////
-  output spi_csel,
-  output spi_clk,
-  output spi_mosi,
-  input spi_miso,
-
-  ////////////////////
-  // DFU State and debug
-  ////////////////////
   output reg dfu_detach = 0,
-  output [7:0] dfu_state,
   output [7:0] debug
 );
 
@@ -80,32 +74,14 @@ module usb_dfu_ctrl_ep #(
 
   localparam DFU_STATE_appIDLE = 'h00;
   localparam DFU_STATE_appDETACH = 'h01;
-  localparam DFU_STATE_dfuIDLE = 'h02;
-  localparam DFU_STATE_dfuDNLOAD_SYNC = 'h03;
-  localparam DFU_STATE_dfuDNBUSY = 'h04;
-  localparam DFU_STATE_dfuDNLOAD_IDLE = 'h05;
-  localparam DFU_STATE_dfuMANIFEST_SYNC = 'h06;
-  localparam DFU_STATE_dfuMANIFEST = 'h07;
-  localparam DFU_STATE_dfuMANIFEST_WAIT_RESET = 'h08;
-  localparam DFU_STATE_dfuUPLOAD_IDLE = 'h09;
-  localparam DFU_STATE_dfuERROR = 'h0a;
-
-  localparam DFU_DETACH_TIMEOUT = 1000;
-
-  localparam ALT_MODE_USERPART = 'h00;
-  localparam ALT_MODE_DATAPART = 'h01;
-  localparam ALT_MODE_BOOTPART = 'h02;
-  localparam ALT_MODE_SECURITY = 'h03;
-  localparam ALT_MODE_MAX = (ALT_MODE_SECURITY + SPI_SECURITY_REGISTERS);
 
   localparam STR_INDEX_MANUFACTURER = 1;
   localparam STR_INDEX_PRODUCT = 2;
   localparam STR_INDEX_SERIAL = 3;
-  localparam STR_INDEX_PARTITIONS = 4;
+  localparam STR_INDEX_UART_MODE = 4;
+  localparam STR_INDEX_DFU_MODE = 5;
 
-  localparam USERPART_NAME = "User Image";
-  localparam DATAPART_NAME = "User Data";
-  localparam BOOTPART_NAME = "Bootloader";
+  localparam DFU_DETACH_TIMEOUT = 1000;
 
   reg [5:0] ctrl_xfr_state = IDLE;
   reg [5:0] ctrl_xfr_state_next;
@@ -120,7 +96,7 @@ module usb_dfu_ctrl_ep #(
   assign dev_addr = dev_addr_i;
 
   assign out_ep_req = out_ep_data_avail;
-  assign out_ep_data_get = (ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE) ? dfu_spi_wr_data_get : out_ep_data_avail;
+  assign out_ep_data_get = out_ep_data_avail;
   reg out_ep_data_valid = 0;
   always @(posedge clk) out_ep_data_valid <= out_ep_data_avail && out_ep_grant;
 
@@ -154,8 +130,8 @@ module usb_dfu_ctrl_ep #(
 
   wire setup_pkt_start = pkt_start && out_ep_setup;
 
-  //wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
-  wire has_data_stage = |wLength;
+  wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
+  //wire has_data_stage = |wLength;
 
   wire out_data_stage;
   assign out_data_stage = has_data_stage && !bmRequestType[7];
@@ -178,103 +154,17 @@ module usb_dfu_ctrl_ep #(
 
   assign in_ep_data_done = (in_data_transfer_done && ctrl_xfr_state == DATA_IN) || send_zero_length_data_pkt;
   assign in_ep_req = (ctrl_xfr_state == DATA_IN) && more_data_to_send;
-  assign in_ep_data_put = (rom_mux == ROM_FIRMWARE) ? dfu_spi_rd_data_put : rom_data_put;
+  assign in_ep_data_put = (ctrl_xfr_state == DATA_IN) && more_data_to_send && in_ep_data_free;
 
   localparam ROM_ENDPOINT = 0;
-  localparam ROM_CONFIG = 1;
-  localparam ROM_STRING = 2;
-  localparam ROM_DFUSTATE = 3;
-  localparam ROM_FIRMWARE = 4;
+  localparam ROM_STRING   = 1;
+  localparam ROM_DFUSTATE = 2;
 
-  reg [8:0] rom_addr = 0;
-  reg [3:0] rom_mux = ROM_ENDPOINT;
-  wire rom_data_put;
-  assign rom_data_put = (ctrl_xfr_state == DATA_IN && more_data_to_send) && in_ep_data_free;
+  reg [7:0] rom_addr = 0;
+  reg [1:0] rom_mux = ROM_ENDPOINT;
 
   reg save_dev_addr = 0;
   reg [6:0] new_dev_addr = 0;
-
-  // Select the flash partition based on altsetting.
-  wire       dfu_part_security = (dfu_altsetting >= ALT_MODE_SECURITY);
-  reg [15:0] dfu_part_start[ALT_MODE_MAX-1:0];
-  reg [15:0] dfu_part_size[ALT_MODE_MAX-1:0];
-
-  initial begin
-    dfu_part_start[ALT_MODE_USERPART] <= USERPART_START / SPI_PAGE_SIZE;
-    dfu_part_size[ALT_MODE_USERPART]  <= USERPART_SIZE / SPI_PAGE_SIZE;
-
-    dfu_part_start[ALT_MODE_DATAPART] <= DATAPART_START / SPI_PAGE_SIZE;
-    dfu_part_size[ALT_MODE_DATAPART]  <= DATAPART_SIZE / SPI_PAGE_SIZE;
-
-    dfu_part_start[ALT_MODE_BOOTPART] <= BOOTPART_START / SPI_PAGE_SIZE;
-    dfu_part_size[ALT_MODE_BOOTPART]  <= BOOTPART_SIZE / SPI_PAGE_SIZE;
-  end
-  
-  genvar alt_part;
-  generate
-    for (alt_part = ALT_MODE_SECURITY; alt_part < ALT_MODE_MAX; alt_part = alt_part + 1) begin
-      initial begin
-        dfu_part_start[alt_part] <= (alt_part - ALT_MODE_SECURITY + 1) << (SPI_SECURITY_REG_SHIFT - $clog2(SPI_PAGE_SIZE));
-        dfu_part_size[alt_part]  <= 1;
-      end
-    end
-  endgenerate
-  
-  ////////////////////////////////////////////////////////////////////////////////
-  // DFU SPI Flash Interface
-  ////////////////////////////////////////////////////////////////////////////////
-  assign dfu_state = dfu_mem['h004];
-  reg [15:0] dfu_altsetting = 0;
-  reg [15:0] dfu_block_offset = 0;
-  reg [15:0] dfu_block_addr = 0;
-  reg [15:0] dfu_block_end = 0;
-
-  wire [7:0] dfu_spi_rd_data;
-  wire dfu_spi_rd_data_put;
-  wire [7:0] dfu_spi_wr_data;
-  wire dfu_spi_wr_data_get;
-  wire dfu_spi_wr_busy;
-  wire dfu_spi_wr_done;
-  falling_edge_detector detect_wr_busy_done (
-    .clk(clk),
-    .in(dfu_spi_wr_busy),
-    .out(dfu_spi_wr_done)
-  );
-
-  wire [7:0] dfu_debug;
-  assign debug[0] = dfu_debug[0];
-  assign debug[1] = dfu_block_addr[0];
-  assign debug[2] = dfu_debug[1];
-  assign debug[3] = out_ep_acked;
-
-  usb_spiflash_bridge #(
-    .ERASE_SIZE(SPI_ERASE_SIZE),
-    .PAGE_SIZE(SPI_PAGE_SIZE)
-  ) dfu_spiflash_bridge (
-    .clk(clk),
-    .reset(reset),
-
-    .spi_csel(spi_csel),
-    .spi_clk(spi_clk),
-    .spi_mosi(spi_mosi),
-    .spi_miso(spi_miso),
-
-    .address(dfu_block_addr),
-    .security(dfu_part_security),
-
-    .rd_request(ctrl_xfr_state == DATA_IN && rom_mux == ROM_FIRMWARE),
-    .rd_data_free(more_data_to_send && in_ep_data_free),
-    .rd_data_put(dfu_spi_rd_data_put),
-    .rd_data(dfu_spi_rd_data),
-
-    .wr_request(ctrl_xfr_state == DATA_OUT && rom_mux == ROM_FIRMWARE),
-    .wr_busy(dfu_spi_wr_busy),
-    .wr_data_avail(out_ep_data_avail),
-    .wr_data_get(dfu_spi_wr_data_get),
-    .wr_data(out_ep_data),
-
-    .debug(dfu_debug)
-  );
 
   ////////////////////////////////////////////////////////////////////////////////
   // DFU Detach Timer
@@ -413,11 +303,6 @@ module usb_dfu_ctrl_ep #(
       setup_data_addr <= setup_data_addr + 1;
     end
 
-    // Handle DFU state transitions.
-    if (dfu_spi_wr_done) begin
-      if (dfu_mem['h004] == DFU_STATE_dfuDNBUSY) dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_SYNC;
-    end
-
     if (setup_stage_end) begin
       data_length <= wLength;
       
@@ -435,9 +320,9 @@ module usb_dfu_ctrl_ep #(
 
             2 : begin
               // CONFIGURATION
-              rom_mux     <= ROM_CONFIG;
-              rom_addr    <= 'h00;
-              rom_length  <= cfg_rom['h00 + 2]; // wTotalLength
+              rom_mux     <= ROM_ENDPOINT;
+              rom_addr    <= 'h12;
+              rom_length  <= ep_rom['h12 + 2]; // wTotalLength
             end
 
             3 : begin
@@ -449,6 +334,14 @@ module usb_dfu_ctrl_ep #(
 
             6 : begin
               // DEVICE_QUALIFIER
+              in_ep_stall <= 1;
+              rom_mux    <= ROM_ENDPOINT;
+              rom_addr   <= 'h00;
+              rom_length <= 'h00;
+            end
+
+            default : begin
+              // UNKNOWN
               in_ep_stall <= 1;
               rom_mux    <= ROM_ENDPOINT;
               rom_addr   <= 'h00;
@@ -476,133 +369,53 @@ module usb_dfu_ctrl_ep #(
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
           rom_length <= 'h00;
-
-          // Consider DFU mode started once we have become configured.
-          dfu_mem['h004] <= (wValue) ? DFU_STATE_dfuIDLE : DFU_STATE_appIDLE;
         end
 
-        'h0b : begin
+        'h00b : begin
           // SET_INTERFACE
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
           rom_length <= 'h00;
-
-          // Select the desired alt mode, possibly adjusting the flash region.
-          dfu_altsetting <= wValue;
         end
 
         'h100 : begin
           // DFU_DETACH
-          rom_mux    <= ROM_FIRMWARE;
+          rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 0;
-          rom_length <= wLength;
+          rom_length <= 'h00;
           
           dfu_mem['h004] <= DFU_STATE_appDETACH;
         end
 
-        'h101 : begin
-          // DFU_DNLOAD
-          if (dfu_mem['h004] == DFU_STATE_dfuIDLE) begin
-            // Starting a new download.
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= wLength;
-
-            dfu_block_offset <= dfu_part_start[dfu_altsetting] - wValue;
-            dfu_block_end   <= wValue + dfu_part_size[dfu_altsetting];
-            dfu_block_addr  <= dfu_part_start[dfu_altsetting];
-            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
-          end else if (dfu_mem['h004] != DFU_STATE_dfuDNLOAD_IDLE) begin
-            // We are not ready to receive another block
-            rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 'h00;
-            rom_length <= 'h00;
-            dfu_mem['h000] <= DFU_STATUS_ERR_WRITE;
-            dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else if (wLength == 0) begin
-            // Download the final (zero length) block
-            rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 'h00;
-            rom_length <= 'h00;
-            dfu_mem['h000] <= DFU_STATUS_OK;
-            dfu_mem['h004] <= DFU_STATE_dfuMANIFEST_SYNC;
-          end else if (wValue >= dfu_block_end) begin
-            rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 'h00;
-            rom_length <= 'h00;
-            dfu_mem['h000] <= DFU_STATUS_ERR_ADDRESS;
-            dfu_mem['h004] <= DFU_STATE_dfuERROR;
-          end else begin
-            // Download the next block
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= wLength;
-            dfu_block_addr <= (wValue + dfu_block_offset);
-            dfu_mem['h004] <= DFU_STATE_dfuDNBUSY;
-          end
-        end
-
-        'h102 : begin
-          // DFU_UPLOAD
-          if (dfu_mem['h004] != DFU_STATE_dfuUPLOAD_IDLE) begin
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= wLength;
-
-            // Switch to the dfuUPLOAD-IDLE state.
-            dfu_block_offset <= dfu_part_start[dfu_altsetting] - wValue;
-            dfu_block_end   <= wValue + dfu_part_size[dfu_altsetting];
-            dfu_block_addr  <= dfu_part_start[dfu_altsetting];
-            dfu_mem['h004] <= DFU_STATE_dfuUPLOAD_IDLE;
-          end else if (wValue >= dfu_block_end) begin
-            rom_mux    <= ROM_ENDPOINT;
-            rom_addr   <= 0;
-            rom_length <= 0;
-            dfu_mem['h004] <= DFU_STATE_dfuIDLE;
-          end else begin
-            rom_mux    <= ROM_FIRMWARE;
-            rom_addr   <= 0;
-            rom_length <= wLength;
-            dfu_block_addr <= (wValue + dfu_block_offset);
-          end
-        end
-
-        'h103 : begin
-          // DFU_GETSTATUS
-          rom_mux    <= ROM_DFUSTATE;
-          rom_addr   <= 'h00;
-          rom_length <= 6;
-          if (dfu_mem['h004] == DFU_STATE_dfuDNLOAD_SYNC) dfu_mem['h004] <= DFU_STATE_dfuDNLOAD_IDLE;
-          if (dfu_mem['h004] == DFU_STATE_dfuMANIFEST_SYNC) dfu_mem['h004] <= DFU_STATE_dfuIDLE;
-        end
-
-        'h104 : begin
-          // DFU_CLRSTATUS
+        'h120 : begin
+          // SET_LINE_CODING
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
-          rom_length <= 0;
-          dfu_mem['h000] <= DFU_STATUS_OK;
-          dfu_mem['h004] <= DFU_STATE_dfuIDLE;
+          rom_length <= 'h00;
         end
 
-        'h105 : begin
-          // DFU_GETSTATE
-          rom_mux    <= ROM_DFUSTATE;
-          rom_addr   <= 'h04;
-          rom_length <= 1;
+        'h121 : begin
+          // GET_LINE_CODING
+          rom_mux    <= ROM_ENDPOINT;
+          rom_addr   <= 'h67;
+          rom_length <= 'h07;
         end
 
-        'h106 : begin
-          // DFU_ABORT
-          rom_mux    <= ROM_DFUSTATE;
+        'h122 : begin
+          // SET_CONTROL_LINE_STATE
+          rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
-          rom_length <= 0;
+          rom_length <= 'h00;
+        end
 
-          // Return to the dfuIDLE state.
-          dfu_mem['h004] <= DFU_STATE_dfuIDLE;
-        end 
+        'h123 : begin
+          // SEND_BREAK
+          rom_mux    <= ROM_ENDPOINT;
+          rom_addr   <= 'h00;
+          rom_length <= 'h00;
+        end
 
-        default begin
+        default : begin
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
           rom_length <= 'h00;
@@ -638,17 +451,14 @@ module usb_dfu_ctrl_ep #(
   end
 
   reg [7:0] ep_rom[255:0];
-  reg [7:0] cfg_rom[255:0];
   reg [7:0] dfu_mem[5:0];
 
   // Mux the data being read
   always @* begin
     case (rom_mux)
       ROM_ENDPOINT : in_ep_data <= ep_rom[rom_addr];
-      ROM_CONFIG   : in_ep_data <= cfg_rom[rom_addr];
       ROM_STRING   : in_ep_data <= str_rom_data;
       ROM_DFUSTATE : in_ep_data <= dfu_mem[rom_addr];
-      ROM_FIRMWARE : in_ep_data <= dfu_spi_rd_data;
       default      : in_ep_data <= 8'b0;
     endcase
   end
@@ -658,10 +468,10 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h000] <= 18; // bLength
       ep_rom['h001] <= 1; // bDescriptorType
       ep_rom['h002] <= 'h00; // bcdUSB[0]
-      ep_rom['h003] <= 'h01; // bcdUSB[1]
-      ep_rom['h004] <= 'h00; // bDeviceClass
-      ep_rom['h005] <= 'h00; // bDeviceSubClass
-      ep_rom['h006] <= 'h00; // bDeviceProtocol
+      ep_rom['h003] <= 'h02; // bcdUSB[1]
+      ep_rom['h004] <= 'h02; // bDeviceClass (Communications Device Class)
+      ep_rom['h005] <= 'h00; // bDeviceSubClass (Abstract Control Model)
+      ep_rom['h006] <= 'h00; // bDeviceProtocol (No class specific protocol required)
       ep_rom['h007] <= MAX_OUT_PACKET_SIZE; // bMaxPacketSize0
 
       ep_rom['h008] <= BOARD_VID >> 0; // idVendor[0]
@@ -676,62 +486,132 @@ module usb_dfu_ctrl_ep #(
       ep_rom['h010] <= STR_INDEX_SERIAL;        // iSerialNumber
       ep_rom['h011] <= 1; // bNumConfigurations
 
-      // Language string descriptor is at string index zero.
-      ep_rom['h012] <= 4;     // bLength
-      ep_rom['h013] <= 3;     // bDescriptorType == STRING
-      ep_rom['h014] <= 'h09;  // wLANGID[0] == US English
-      ep_rom['h015] <= 'h04;  // wLANGID[1]
-
       // configuration descriptor
-      cfg_rom['h00] <= 9; // bLength
-      cfg_rom['h01] <= 2; // bDescriptorType
-      cfg_rom['h02] <= (9+9) + (ALT_MODE_MAX * 9); // wTotalLength[0]
-      cfg_rom['h03] <= 0; // wTotalLength[1]
-      cfg_rom['h04] <= 1; // bNumInterfaces
-      cfg_rom['h05] <= 1; // bConfigurationValue
-      cfg_rom['h06] <= 0; // iConfiguration
-      cfg_rom['h07] <= 'hC0; // bmAttributes
-      cfg_rom['h08] <= 50; // bMaxPower
+      ep_rom['h012] <= 9; // bLength
+      ep_rom['h013] <= 2; // bDescriptorType
+      ep_rom['h014] <= (9+9+5+5+4+5+7+9+7+7+9+9); // wTotalLength[0]
+      ep_rom['h015] <= 0; // wTotalLength[1]
+      ep_rom['h016] <= 3; // bNumInterfaces
+      ep_rom['h017] <= 1; // bConfigurationValue
+      ep_rom['h018] <= 0; // iConfiguration
+      ep_rom['h019] <= 'hC0; // bmAttributes
+      ep_rom['h01A] <= 50; // bMaxPower
+
+      // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+      ep_rom['h01B] <= 9; // bLength
+      ep_rom['h01C] <= 4; // bDescriptorType
+      ep_rom['h01D] <= 0; // bInterfaceNumber
+      ep_rom['h01E] <= 0; // bAlternateSetting
+      ep_rom['h01F] <= 1; // bNumEndpoints
+      ep_rom['h020] <= 2; // bInterfaceClass (Communications Device Class)
+      ep_rom['h021] <= 2; // bInterfaceSubClass (Abstract Control Model)
+      ep_rom['h022] <= 0; // bInterfaceProtocol (0 = ?, 1 = AT Commands: V.250 etc)
+      ep_rom['h023] <= STR_INDEX_UART_MODE; // iInterface
+
+      // CDC Header Functional Descriptor, CDC Spec 5.2.3.1, Table 26
+      ep_rom['h024] <= 5;     // bFunctionLength
+      ep_rom['h025] <= 'h24;  // bDescriptorType
+      ep_rom['h026] <= 'h00;  // bDescriptorSubtype
+      ep_rom['h027] <= 'h10;
+      ep_rom['h028] <= 'h01;  // bcdCDC
       
+      // Call Management Functional Descriptor, CDC Spec 5.2.3.2, Table 27
+      ep_rom['h029] <= 5;     // bFunctionLength
+      ep_rom['h02A] <= 'h24;  // bDescriptorType
+      ep_rom['h02B] <= 'h01;  // bDescriptorSubtype
+      ep_rom['h02C] <= 'h00;  // bmCapabilities
+      ep_rom['h02D] <= 1;     // bDataInterface
+
+      // Abstract Control Management Functional Descriptor, CDC Spec 5.2.3.3, Table 28
+      ep_rom['h02E] <= 4;     // bFunctionLength
+      ep_rom['h02F] <= 'h24;  // bDescriptorType
+      ep_rom['h030] <= 'h02;  // bDescriptorSubtype
+      ep_rom['h031] <= 'h06;  // bmCapabilities
+
+      // Union Functional Descriptor, CDC Spec 5.2.3.8, Table 33
+      ep_rom['h032] <= 5;     // bFunctionLength
+      ep_rom['h033] <= 'h24;  // bDescriptorType
+      ep_rom['h034] <= 'h06;  // bDescriptorSubtype
+      ep_rom['h035] <= 0;     // bMasterInterface
+      ep_rom['h036] <= 1;     // bSlaveInterface0
+
+      // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
+      ep_rom['h037] <= 7;     // bLength
+      ep_rom['h038] <= 5;     // bDescriptorType
+      ep_rom['h039] <= (CDC_ACM_ENDPOINT | 'h80); // bEndpointAddress
+      ep_rom['h03A] <= 'h03;  // bmAttributes (0x03=intr)
+      ep_rom['h03B] <= 8;     // wMaxPacketSize[0]
+      ep_rom['h03C] <= 0;     // wMaxPacketSize[1]
+      ep_rom['h03D] <= 64;    // bInterval
+
+    	// interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+      ep_rom['h03E] <= 9;     // bLength
+      ep_rom['h03F] <= 4;     // bDescriptorType
+      ep_rom['h040] <= 1;     // bInterfaceNumber
+      ep_rom['h041] <= 0;     // bAlternateSetting
+      ep_rom['h042] <= 2;     // bNumEndpoints
+      ep_rom['h043] <= 'h0A;  // bInterfaceClass
+      ep_rom['h044] <= 'h00;  // bInterfaceSubClass
+      ep_rom['h045] <= 'h00;  // bInterfaceProtocol
+      ep_rom['h046] <= 0;     // iInterface
+
+      // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
+      ep_rom['h047] <= 7;     // bLength
+      ep_rom['h048] <= 5;     // bDescriptorType
+      ep_rom['h049] <= CDC_RX_ENDPOINT; // bEndpointAddress
+      ep_rom['h04A] <= 'h02;  //bmAttributes (0x02=bulk)
+      ep_rom['h04B] <= MAX_IN_PACKET_SIZE; // wMaxPacketSize[0]
+      ep_rom['h04C] <= 0;     // wMaxPacketSize[1]
+      ep_rom['h04D] <= 0;     // bInterval
+
+      // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
+      ep_rom['h04E] <= 7;     // bLength
+      ep_rom['h04F] <= 5;     // bDescriptorType
+      ep_rom['h050] <= (CDC_TX_ENDPOINT | 'h80); // bEndpointAddress
+      ep_rom['h051] <= 'h02;  // bmAttributes (0x02=bulk)
+      ep_rom['h052] <= MAX_OUT_PACKET_SIZE; // wMaxPacketSize[0]
+      ep_rom['h053] <= 0;     // wMaxPacketSize[1]
+      ep_rom['h054] <= 0;     // bInterval
+
+      // DFU Interface Descriptor, DFU Spec 4.1.2, Table 4.1
+      ep_rom['h055] <= 9;     // bLength
+      ep_rom['h056] <= 4;     // bDescriptorType
+      ep_rom['h057] <= 2;     // bInterfaceNumber
+      ep_rom['h058] <= 0;     // bAlternateSetting
+      ep_rom['h059] <= 0;     // bNumEndpoints
+      ep_rom['h05A] <= 'hFE;  // bInterfaceClass (Application Specific Class Code)
+      ep_rom['h05B] <= 1;     // bInterfaceSubClass (Device Firmware Upgrade Code)
+      ep_rom['h05C] <= 1;     // bInterfaceProtocol (Runtime protocol)
+      ep_rom['h05D] <= STR_INDEX_DFU_MODE; // iInterface
+
       // DFU Header Functional Descriptor, DFU Spec 4.1.3, Table 4.2
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h09] <= 9;           // bFunctionLength
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0A] <= 'h21;        // bDescriptorType
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0B] <= 'h0f;        // bmAttributes
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0C] <= DFU_DETACH_TIMEOUT >> 0; // wDetachTimeout[0]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0D] <= DFU_DETACH_TIMEOUT >> 8; // wDetachTimeout[1]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0E] <= SPI_PAGE_SIZE >> 0; // wTransferSize[0]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h0F] <= SPI_PAGE_SIZE >> 8; // wTransferSize[1]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h10] <= 'h10;        // bcdDFUVersion[0]
-      cfg_rom[(ALT_MODE_MAX * 9) + 'h11] <= 'h01;        // bcdDFUVersion[1]
+      ep_rom['h05E] <= 9;     // bFunctionLength
+      ep_rom['h05F] <= 'h21;  // bDescriptorType
+      ep_rom['h060] <= 'h0F;  // bmAttributes
+      ep_rom['h061] <= DFU_DETACH_TIMEOUT >> 0; // wDetachTimeout[0]
+      ep_rom['h062] <= DFU_DETACH_TIMEOUT >> 8; // wDetachTimeout[1]
+      ep_rom['h063] <= MAX_OUT_PACKET_SIZE; // wTransferSize[0]
+      ep_rom['h064] <= 'h00;  // wTransferSize[1]
+      ep_rom['h065] <= 'h10;  // bcdDFUVersion[0]
+      ep_rom['h066] <= 'h01;  // bcdDFUVersion[1]
+      
+      // LINE_CODING
+      ep_rom['h067] <= 'h80; // dwDTERate[0]
+      ep_rom['h068] <= 'h25; // dwDTERate[1]
+      ep_rom['h069] <= 'h00; // dwDTERate[2]
+      ep_rom['h06A] <= 'h00; // dwDTERate[3]
+      ep_rom['h06B] <= 1; // bCharFormat (1 stop bit)
+      ep_rom['h06C] <= 0; // bParityType (None)
+      ep_rom['h06D] <= 8; // bDataBits (8 bits)
 
       // DFU State data
-      dfu_mem['h000] <= DFU_STATUS_OK;      // bStatus
-      dfu_mem['h001] <= 1;                  // bwPollTimeout[0]
-      dfu_mem['h002] <= 0;                  // bwPollTimeout[1]
-      dfu_mem['h003] <= 0;                  // bwPollTimeout[2]
-      dfu_mem['h004] <= DFU_STATE_appIDLE;  // bState
-      dfu_mem['h005] <= 0;                  // iString
+      dfu_mem['h00] <= DFU_STATUS_OK;      // bStatus
+      dfu_mem['h01] <= 1;                  // bwPollTimeout[0]
+      dfu_mem['h02] <= 0;                  // bwPollTimeout[1]
+      dfu_mem['h03] <= 0;                  // bwPollTimeout[2]
+      dfu_mem['h04] <= DFU_STATE_appIDLE;  // bState
+      dfu_mem['h05] <= 0;                  // iString
   end
-
-///////////////////////////////////////////////////////////
-// Generate Configuration Descriptors for the Partitions
-///////////////////////////////////////////////////////////
-genvar alt_num;
-generate
-  for (alt_num = 0; alt_num < ALT_MODE_MAX; alt_num = alt_num + 1) begin
-    initial begin
-      cfg_rom[alt_num*9 + 'h09] <= 9;     // bLength
-      cfg_rom[alt_num*9 + 'h0A] <= 4;     // bDescriptorType
-      cfg_rom[alt_num*9 + 'h0B] <= 0;     // bInterfaceNumber
-      cfg_rom[alt_num*9 + 'h0C] <= alt_num; // bAlternateSetting
-      cfg_rom[alt_num*9 + 'h0D] <= 0;     // bNumEndpoints
-      cfg_rom[alt_num*9 + 'h0E] <= 'hFE;  // bInterfaceClass (Application Specific Class Code)
-      cfg_rom[alt_num*9 + 'h0F] <= 1;     // bInterfaceSubClass (Device Firmware Upgrade Code)
-      cfg_rom[alt_num*9 + 'h10] <= 2;     // bInterfaceProtocol (DFU mode protocol)
-      cfg_rom[alt_num*9 + 'h11] <= (STR_INDEX_PARTITIONS + alt_num); // iInterface
-    end
-  end
-endgenerate
 
 ///////////////////////////////////////////////////////////
 // Generate String Descriptor ROM
@@ -744,10 +624,8 @@ usb_string_rom#(
     BOARD_MFR_NAME, 8'h00,
     BOARD_PRODUCT_NAME, 8'h00,
     BOARD_SERIAL, 8'h00,
-    USERPART_NAME, 8'h00,
-    DATAPART_NAME, 8'h00,
-    BOOTPART_NAME, 8'h00,
-    {(SPI_SECURITY_REGISTERS){"Security Reg", 8'h00}}
+    "Serial Interface", 8'h00,
+    "DFU Interface", 8'h00
   })
 ) str_rom(
   .str_index(wValue[7:0]),

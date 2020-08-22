@@ -23,3 +23,4 @@ localparam BOARD_PID = 'h615d;  /* Logicbone DFU Bootloader */
 /* String Descriptors */
 localparam BOARD_MFR_NAME = "oskirby";
 localparam BOARD_PRODUCT_NAME = "Logicbone ECP5";
+localparam BOARD_SERIAL = "123456";

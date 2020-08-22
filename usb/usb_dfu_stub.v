@@ -19,12 +19,6 @@
     .usb_n_rx(usb_n_rx),
     .usb_tx_en(usb_tx_en),
 
-    // SPI pins
-    .spi_csel(spi_csel),
-    .spi_clk(spi_clk),
-    .spi_mosi(spi_mosi),
-    .spi_miso(spi_miso),
-
     // DFU state and debug
     .dfu_state(dfu_state),
     .debug( debug )
@@ -116,7 +110,7 @@ serial.v        - width adapter (x widths to y widths)
 
 */
 
-module usb_dfu_core (
+module usb_dfu_stub (
   input  clk_48mhz,
   input  clk,
   input  reset,
@@ -128,12 +122,6 @@ module usb_dfu_core (
   input  usb_p_rx,
   input  usb_n_rx,
   output usb_tx_en,
-
-  // SPI lines.
-  output spi_csel,
-  output spi_clk,
-  output spi_mosi,
-  input spi_miso,
 
   // DFU state and debug
   output dfu_detach,
@@ -176,7 +164,7 @@ module usb_dfu_core (
   reg [31:0] host_presence_timer = 0;
   reg host_presence_timeout = 0;
 
-  usb_dfu_ctrl_ep dfu_ep_inst (
+  usb_dfu_stub_ep ctrl_ep_inst (
     .clk(clk),
     .clk_48mhz(clk_48mhz),
     .reset(reset),
@@ -202,12 +190,6 @@ module usb_dfu_core (
     .in_ep_data_done(ctrl_in_ep_data_done),
     .in_ep_stall(ctrl_in_ep_stall),
     .in_ep_acked(ctrl_in_ep_acked),
-
-    // SPI flash interface
-    .spi_csel(spi_csel),
-    .spi_clk(spi_clk),
-    .spi_mosi(spi_mosi),
-    .spi_miso(spi_miso),
 
     // DFU state and debug
     .dfu_detach(dfu_detach),

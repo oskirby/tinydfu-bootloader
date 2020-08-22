@@ -23,3 +23,4 @@ localparam BOARD_PID = 'h6130;  /* TinyFPGA Bootloader */
 /* String Descriptors */
 localparam BOARD_MFR_NAME = "TinyFPGA";
 localparam BOARD_PRODUCT_NAME = "TinyFPGA Boot";
+localparam BOARD_SERIAL = "123456";

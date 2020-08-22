@@ -49,6 +49,7 @@ module usb_fs_pe #(
   ////////////////////
   output sof_valid,
   output [10:0] frame_index,
+  output reg rst_detect,
 
 
 
@@ -238,4 +239,25 @@ module usb_fs_pe #(
     .tx_data_get(tx_data_get),
     .tx_data(tx_data)
   );
+
+  ///////////////////////////
+  // USB Reset Detection
+  ///////////////////////////
+  // USB reset is signalled by single-ended zero state for 10ms.
+  // Devices may reset after SE0 is detected for 2.5us or more.
+  localparam USB_RESET_TIMEOUT = (5 * 48);
+
+  // reset detection
+  reg [$clog2(USB_RESET_TIMEOUT)-1:0] usb_reset_timer = USB_RESET_TIMEOUT;
+  always @(posedge clk_48mhz) begin
+    if (usb_p_rx || usb_n_rx) begin
+      usb_reset_timer <= USB_RESET_TIMEOUT;
+      rst_detect <= 1'b0;
+    end else if (usb_reset_timer) begin
+      usb_reset_timer <= usb_reset_timer - 1;
+      rst_detect <= 1'b0;
+    end else begin
+      rst_detect <= 1'b1;
+    end
+  end
 endmodule
