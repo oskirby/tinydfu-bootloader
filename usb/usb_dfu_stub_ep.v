@@ -37,6 +37,7 @@ module usb_dfu_stub_ep #(
   // DFU Detach Signalling
   ///////////////////////////
   output reg dfu_detach = 0,
+  output [7:0] dfu_state,
   output [7:0] debug
 );
 
@@ -445,6 +446,7 @@ module usb_dfu_stub_ep #(
 
   reg [7:0] ep_rom[255:0];
   reg [7:0] dfu_mem[5:0];
+  assign dfu_state = dfu_mem['h04];
 
   // Mux the data being read
   always @* begin
