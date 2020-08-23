@@ -630,7 +630,7 @@ module usb_dfu_ctrl_ep #(
       end
     end
 
-    if (reset) begin
+    if (reset || usb_reset) begin
       dev_addr_i <= 0;
       setup_data_addr <= 0;
       save_dev_addr <= 0;
