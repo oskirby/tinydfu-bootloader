@@ -19,27 +19,40 @@ localparam STRING_CHARS = $size(STRINGS) / 8;
 localparam STRING_ROM_SIZE = (STRING_CHARS * 2) + 4;
 localparam STRING_ROM_BITS = $clog2(STRING_ROM_SIZE);
 
+// Extract a single character from the string, at a given byte offset.
+// This is written in a very counter-intuitive way, because Vivado
+// is unable to identify a slicing range within a function as constant.
+function [7:0] get_str_char;
+    input integer coff;
+    reg [7:0] cval;
+    begin
+        cval[0] = STRINGS[$size(STRINGS) - coff*8 - 8];
+        cval[1] = STRINGS[$size(STRINGS) - coff*8 - 7];
+        cval[2] = STRINGS[$size(STRINGS) - coff*8 - 6];
+        cval[3] = STRINGS[$size(STRINGS) - coff*8 - 5];
+        cval[4] = STRINGS[$size(STRINGS) - coff*8 - 4];
+        cval[5] = STRINGS[$size(STRINGS) - coff*8 - 3];
+        cval[6] = STRINGS[$size(STRINGS) - coff*8 - 2];
+        cval[7] = STRINGS[$size(STRINGS) - coff*8 - 1];
+    end
+    get_str_char=cval;
+endfunction
+
 // Count the number of NULLs to determine how many string descriptors exist.
 function [7:0] get_num_strings;
     integer nbyte;
-    integer count;
+    integer ncount;
     begin
-        count = 0;
+        ncount = 0;
         for (nbyte=0; nbyte < STRING_CHARS; nbyte = nbyte + 1) begin
-            if (get_str_char(nbyte) == 8'h00) count = count+1;
+            if (get_str_char(nbyte) == 8'h00) ncount = ncount + 1;
         end
     end
-    get_num_strings=count;
+    get_num_strings=ncount;
 endfunction
 generate
     localparam STRING_ROM_DESCS = get_num_strings() + 1;
 endgenerate
-
-// Extract a single character from the string, at a given byte offset.
-function [7:0] get_str_char;
-    input integer coffset;
-    get_str_char = STRINGS[$size(STRINGS)-(coffset*8)-1 : $size(STRINGS)-(coffset*8)-8];
-endfunction
 
 // Locate the offset, in bytes, of the desired string.
 function [$clog2(STRING_CHARS)-1:0] get_str_offset;
