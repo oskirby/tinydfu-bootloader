@@ -1,9 +1,16 @@
 set RTL_USB_DIR ../../usb
 set PROJECT bootloader
 
+# Override the part number of passed as an argument.
+if { $argc >= 1 } {
+	set XC7PART [lindex $argv 0]
+} else {
+	set XC7PART xc7a35tcsg324-1
+}
+
 # Create Project
 
-create_project -force -name ${PROJECT} -part xc7a100tcsg324-1
+create_project -force -name ${PROJECT} -part ${XC7PART}
 set_msg_config -id {Common 17-55} -new_severity {Warning}
 
 # Add Sources
@@ -39,6 +46,7 @@ set_property -dict [ eval list CONFIG.PRIM_IN_FREQ {100.000} \
 	CONFIG.NUM_OUT_CLKS {1} \
 	CONFIG.RESET_TYPE {ACTIVE_HIGH} \
 	CONFIG.RESET_PORT {reset} \
+	CONFIG.LOCKED_PORT {locked} \
 	CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {48.000}] [get_ips ${PLLNAME}]
 generate_target all [get_files ${PROJECT}.srcs/sources_1/ip/${PLLNAME}/${PLLNAME}.xci]
 create_ip_run [get_ips ${PLLNAME}]
@@ -55,7 +63,7 @@ set_property PROCESSING_ORDER EARLY [get_files arty_a7.xdc]
 
 # Synthesis
 
-synth_design -directive default -top ${PROJECT} -part xc7a100tcsg324-1
+synth_design -directive default -top ${PROJECT} -part ${XC7PART}
 
 # Synthesis report
 
