@@ -137,7 +137,7 @@ module usb_serial_core (
   // uart pipeline out (out of the host, into the device, out of the module)
   output [7:0] uart_out_data,
   output       uart_out_valid,
-  input        uart_out_ready,
+  input        uart_out_get,
   
   // DFU state and debug
   output dfu_detach,
@@ -259,7 +259,7 @@ module usb_serial_core (
 
     .uart_out_data(uart_out_data),
     .uart_out_valid(uart_out_valid),
-    .uart_out_ready(uart_out_ready)
+    .uart_out_get(uart_out_get)
   );
 
   usb_fs_pe #(

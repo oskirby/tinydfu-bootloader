@@ -29,7 +29,9 @@
 
 */
 
-module usb_uart_out_ep (
+module usb_uart_out_ep#(
+  parameter MAX_OUT_PACKET_SIZE = 32
+)(
   input clk,
   input reset,
 
@@ -48,132 +50,74 @@ module usb_uart_out_ep (
   ///////////////////////////
   // UART Pipeline interface
   ///////////////////////////
-  output [7:0] uart_out_data,
+  output reg [7:0] uart_out_data,
   output       uart_out_valid,
-  input        uart_out_ready,
+  input        uart_out_get,
 );
 
-  // Timeout counter width.
-  localparam TimeoutWidth = 3;
+  localparam MAX_OUT_PACKET_BITS = $clog2(MAX_OUT_PACKET_SIZE);
 
-  // We don't stall
+  // Receive FIFO
+  reg rx_pingpong = 0;   // Indicates which of the RX FIFOs is ready for USB data.
+  reg rx_fifo_full = 0;  // Flag set if both FIFOs are full.
+  reg [MAX_OUT_PACKET_BITS:0] rx_write_ptr = 0; // Write pointer into rx_pingpong.
+  reg [MAX_OUT_PACKET_BITS:0] rx_read_ptr = 0;  // Read pointer into ~rx_pingpong.
+  reg [MAX_OUT_PACKET_BITS:0] rx_read_len = 0;  // Data availabe in ~rx_pingpong.
+  reg [7:0] rx_fifo[1:0][MAX_OUT_PACKET_SIZE-1:0];
+
+  // Route signals into the USB core.
   assign out_ep_stall = 1'b0;
+  assign out_ep_req = (rx_write_ptr < MAX_OUT_PACKET_SIZE) && ~rx_fifo_full;
+  assign out_ep_data_get = (out_ep_req && out_ep_grant && out_ep_data_avail);
 
-  // Registers for the out pipeline (out of the module)
-  reg [7:0] uart_out_data_reg;
-  reg [7:0] uart_out_data_overflow_reg;
-  reg       uart_out_valid_reg;
+  // Route signals out of UART interface.
+  assign uart_out_valid = (rx_read_ptr < rx_read_len);
+  
+  // Apply a latch delay to the data_get signal, since the USB core
+  // takes one clock for data to start flowing.
+  reg out_ep_data_valid = 0;
+  always @(posedge clk) out_ep_data_valid <= out_ep_data_get;
 
-  // registers for the out end point (out of the host)
-  reg       out_ep_req_reg;
-  reg       out_ep_data_get_reg;
-
-  // out pipeline / out endpoint state machine state (6 states -> 3 bits)
-  reg [1:0] pipeline_out_state;
-
-  localparam PipelineOutState_Idle         = 0;
-  localparam PipelineOutState_WaitData     = 1;
-  localparam PipelineOutState_PushData     = 2;
-  localparam PipelineOutState_WaitPipeline = 3;
-
-  // connect the pipeline registers to the outgoing ports
-  assign uart_out_data = uart_out_data_reg;
-  assign uart_out_valid = uart_out_valid_reg;
-
-  // automatically make the bus request from the data_available
-  // latch it with out_ep_req_reg
-  assign out_ep_req = ( out_ep_req_reg || out_ep_data_avail );
-
-  wire out_granted_data_available;
-
-  assign out_granted_data_available = out_ep_req && out_ep_grant;
-
-  assign out_ep_data_get = ( uart_out_ready || ~uart_out_valid_reg ) && out_ep_data_get_reg;
-
-  reg [7:0] out_stall_data;
-  reg       out_stall_valid;
-
-  // do HOST OUT, DEVICE IN, PIPELINE OUT (!)
+  // Receive Data into the FIFO.
   always @(posedge clk) begin
-      if ( reset ) begin
-          pipeline_out_state <= PipelineOutState_Idle;
-          uart_out_data_reg <= 0;
-          uart_out_valid_reg <= 0;
-          out_ep_req_reg <= 0;
-          out_ep_data_get_reg <= 0;
-          out_stall_data <= 0;
-          out_stall_valid <= 0;
-      end else begin
-          case( pipeline_out_state )
-              PipelineOutState_Idle: begin
-                  // Waiting for the data_available signal indicating that a data packet has arrived
-                  if ( out_granted_data_available ) begin
-                      // indicate that we want the data
-                      out_ep_data_get_reg <= 1;
-                      // although the bus has been requested automatically, we latch the request so we control it
-                      out_ep_req_reg <= 1;
-                      // now wait for the data to set up
-                      pipeline_out_state <= PipelineOutState_WaitData;
-                      uart_out_valid_reg <= 0;
-                      out_stall_data <= 0;
-                      out_stall_valid <= 0;
-                  end
-              end
-              PipelineOutState_WaitData: begin
-                  // it takes one cycle for the juices to start flowing
-                  // we got here when we were starting or if the outgoing pipe stalled
-                  if ( uart_out_ready || ~uart_out_valid_reg ) begin
-                      //if we were stalled, we can send the byte we caught while we were stalled
-                      // the actual stalled byte now having been VALID & READY'ed
-                      if ( out_stall_valid ) begin
-                        uart_out_data_reg <= out_stall_data;
-                        uart_out_valid_reg <= 1;
-                        out_stall_data <= 0;
-                        out_stall_valid <= 0;
-                        if ( out_ep_data_avail )
-                          pipeline_out_state <= PipelineOutState_PushData;
-                        else begin
-                          pipeline_out_state <= PipelineOutState_WaitPipeline;
-                        end
-                      end else begin
-                          pipeline_out_state <= PipelineOutState_PushData;
-                      end
-                  end
-              end
-              PipelineOutState_PushData: begin
-                  // can grab a character if either the out was accepted or the out reg is empty
-                  if ( uart_out_ready || ~uart_out_valid_reg ) begin
-                    // now we really have got some data and a place to shove it
-                    uart_out_data_reg <= out_ep_data;
-                    uart_out_valid_reg <= 1;
-                    if ( ~out_ep_data_avail ) begin
-                        // stop streaming, now just going to wait until the character is accepted
-                        out_ep_data_get_reg <= 0;
-                        pipeline_out_state <= PipelineOutState_WaitPipeline;
-                    end
-                  end else begin
-                    // We're in push data so there is a character, but our pipeline has stalled
-                    // need to save the character and wait.
-                    out_stall_data <= out_ep_data;
-                    out_stall_valid <= 1;
-                    pipeline_out_state <= PipelineOutState_WaitData;                     
-                    if ( ~out_ep_data_avail )
-                        out_ep_data_get_reg <= 0;
-                  end
-              end
-              PipelineOutState_WaitPipeline: begin
-                  // unhand the bus (don't want to block potential incoming) - be careful, this works instantly!
-                  out_ep_req_reg <= 0;
-                  if ( uart_out_ready ) begin
-                      uart_out_valid_reg <= 0;
-                      uart_out_data_reg <= 0;
-                      pipeline_out_state <= PipelineOutState_Idle;
-                  end
-
-              end
-
-          endcase
+    if ( reset ) begin
+      rx_pingpong <= 0;
+      rx_write_ptr <= 0;
+      rx_read_ptr <= 0;
+      rx_read_len <= 0;
+      rx_fifo_full <= 0;
+    end
+    else begin
+      // Receive data into USB side of the FIFO.
+      if (!out_ep_setup && out_ep_data_valid) begin
+        rx_fifo[rx_pingpong][rx_write_ptr] <= out_ep_data;
+        rx_write_ptr <= rx_write_ptr + 1;
       end
+      // Handle the end-of-packet event when out_ep_data_valid goes low.
+      else if (rx_write_ptr) begin
+          // If the UART fifo is free, swap the FIFOs and continue.
+          if (~uart_out_valid) begin
+            rx_pingpong <= ~rx_pingpong;
+            rx_read_len <= rx_write_ptr;
+            rx_read_ptr <= 0;
+            rx_write_ptr <= 0;
+            rx_fifo_full <= 0;
+          end
+          // Otherwise, both FIFOs are now full.
+          else begin
+            rx_fifo_full <= 1;
+          end
+      end
+
+      // Read data from the UART side of the FIFO.
+      if (uart_out_valid && uart_out_get) begin
+        uart_out_data <= rx_fifo[~rx_pingpong][rx_read_ptr + 1];
+        rx_read_ptr <= rx_read_ptr + 1;
+      end
+      else begin
+        uart_out_data <= rx_fifo[~rx_pingpong][rx_read_ptr];
+      end
+    end
   end
 
 endmodule
