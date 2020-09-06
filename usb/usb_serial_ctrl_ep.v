@@ -37,6 +37,12 @@ module usb_serial_ctrl_ep #(
   input in_ep_acked,
 
   ///////////////////////////
+  // UART Control Signals.
+  ///////////////////////////
+  output reg uart_rts = 0,
+  output reg uart_dtr = 0,
+
+  ///////////////////////////
   // DFU Detach Signalling
   ///////////////////////////
   output reg dfu_detach = 0,
@@ -139,10 +145,10 @@ module usb_serial_ctrl_ep #(
   wire in_data_stage;
   assign in_data_stage = has_data_stage && bmRequestType[7];
 
-  reg [15:0] rom_length = 0;
-  reg [15:0] data_length = 0;
+  reg [7:0] rom_length = 0;
+  reg [7:0] data_length = 0;
 
-  wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 16'b0) || (data_length == 16'b0));
+  wire all_data_sent = (ctrl_xfr_state == DATA_IN) && ((rom_length == 8'b0) || (data_length == 8'b0));
   wire more_data_to_send = !all_data_sent;
 
   wire in_data_transfer_done;
@@ -304,7 +310,7 @@ module usb_serial_ctrl_ep #(
     end
 
     if (setup_stage_end) begin
-      data_length <= wLength;
+      data_length <= (wLength[15:8]) ? 8'hff : wLength[7:0];
       
       // Standard Requests
       case ({bmRequestType[6:5], bRequest})
@@ -406,6 +412,9 @@ module usb_serial_ctrl_ep #(
           rom_mux    <= ROM_ENDPOINT;
           rom_addr   <= 'h00;
           rom_length <= 'h00;
+
+          uart_dtr <= wValue[0];
+          uart_rts <= wValue[1];
         end
 
         'h123 : begin
@@ -447,6 +456,8 @@ module usb_serial_ctrl_ep #(
       dev_addr_i <= 0;
       setup_data_addr <= 0;
       save_dev_addr <= 0;
+      uart_rts <= 0;
+      uart_dtr <= 0;
     end
   end
 
@@ -613,25 +624,25 @@ module usb_serial_ctrl_ep #(
       dfu_mem['h05] <= 0;                  // iString
   end
 
-///////////////////////////////////////////////////////////
-// Generate String Descriptor ROM
-///////////////////////////////////////////////////////////
-wire [7:0] str_rom_data;
-wire [7:0] str_rom_length;
+  ///////////////////////////////////////////////////////////
+  // Generate String Descriptor ROM
+  ///////////////////////////////////////////////////////////
+  wire [7:0] str_rom_data;
+  wire [7:0] str_rom_length;
 
-usb_string_rom#(
-  .STRINGS({
-    BOARD_MFR_NAME, 8'h00,
-    BOARD_PRODUCT_NAME, 8'h00,
-    BOARD_SERIAL, 8'h00,
-    "Serial Interface", 8'h00,
-    "DFU Interface", 8'h00
-  })
-) str_rom(
-  .str_index(wValue[7:0]),
-  .rom_addr(rom_addr),
-  .rom_length(str_rom_length),
-  .rom_data(str_rom_data)
-);
+  usb_string_rom#(
+    .STRINGS({
+      BOARD_MFR_NAME, 8'h00,
+      BOARD_PRODUCT_NAME, 8'h00,
+      BOARD_SERIAL, 8'h00,
+      "Serial Interface", 8'h00,
+      "DFU Interface", 8'h00
+    })
+  ) str_rom(
+    .str_index(wValue[7:0]),
+    .rom_addr(rom_addr),
+    .rom_length(str_rom_length),
+    .rom_data(str_rom_data)
+  );
 
 endmodule

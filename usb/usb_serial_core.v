@@ -138,6 +138,10 @@ module usb_serial_core (
   output [7:0] uart_out_data,
   output       uart_out_valid,
   input        uart_out_get,
+
+  // uart control signals.
+  output wire  uart_dtr,  // Data Terminal Ready - host has connected.
+  output wire  uart_rts,  // Ready to Send - host is able to accept data.
   
   // DFU state and debug
   output dfu_detach,
@@ -206,6 +210,10 @@ module usb_serial_core (
     .in_ep_data_done(ctrl_in_ep_data_done),
     .in_ep_stall(ctrl_in_ep_stall),
     .in_ep_acked(ctrl_in_ep_acked),
+
+    // UART control signals
+    .uart_dtr(uart_dtr),
+    .uart_rts(uart_rts),
 
     // DFU state and debug
     .dfu_detach(dfu_detach)
